@@ -281,13 +281,17 @@ def lauf(args, server):
         shot(front, "display_bereit")
         shot(ausgabe, "ausgabe_bereit")
         ausgabe.locator(".phase-bereit button", has_text="Abgeholt").first.click()
-        ausgabe.wait_for_selector(".toast button:has-text('Rückgängig')", timeout=3000)
-        ausgabe.locator(".toast button", has_text="Rückgängig").last.click()
+        # gezielt den Toast dieser Aktion – der "ist abholbereit"-Toast hat auch einen Rückgängig-Knopf
+        abgeholt_toast = ausgabe.locator(".toast", has_text=f"#{nr} abgeholt")
+        abgeholt_toast.wait_for(timeout=3000)
+        abgeholt_toast.locator("button", has_text="Rückgängig").click()
         status_von = lambda: next(x for x in state()["bestellungen"] if str(x["id"]) == nr)["status"]  # noqa: E731
         check("Rückgängig nach Abholen -> wieder 'bereit'", bis(lambda: status_von() == "bereit"), status_von())
         settings.locator("label.switch", has_text="Abholbereit").click()
         check("Modus aus: 'bereit'-Bestellung bleibt sichtbar (Badge)",
-              bis(lambda: ausgabe.locator(".order .badge-ok", has_text="bereit").count() == 1))
+              bis(lambda: ausgabe.locator(".order .badge-ok", has_text="bereit").count() == 1),
+              f"{ausgabe.locator('.order .badge-ok', has_text='bereit').count()} Badges, Status {status_von()}, "
+              f"bereit_aktiv={state()['einstellungen']['bereit_aktiv']}")
 
         print("Konflikte zwischen Geräten")
         kasse2 = seite("/kasse")
