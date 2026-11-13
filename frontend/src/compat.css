@@ -1,0 +1,101 @@
+/* =====================================================================
+   Fallbacks für alte Browser (LineageOS 14.1 / Android 7.1 WebView).
+   Moderne Browser ignorieren alles hier – die Regeln greifen nur über
+   .no-flexgap (per JS erkannt, Chrome < 84) bzw. @supports not grid (< 57).
+   ===================================================================== */
+
+/* ---------- Flex ohne `gap`: Abstände per Margin ---------- */
+
+/* umbrechende Zeilen */
+.no-flexgap .row > *,
+.no-flexgap .page-head > *,
+.no-flexgap .order-head > *,
+.no-flexgap .filter > *,
+.no-flexgap .pactions > *,
+.no-flexgap .home-kpis > *,
+.no-flexgap .home-hero > * { margin-right: 10px; margin-bottom: 6px; }
+
+/* einzeilige Leisten */
+.no-flexgap .header > * + *,
+.no-flexgap .header-right > * + *,
+.no-flexgap .nav > * + *,
+.no-flexgap .brand > * + *,
+.no-flexgap .status > * + *,
+.no-flexgap .switch > * + *,
+.no-flexgap .wait > * + *,
+.no-flexgap .bpos li > * + *,
+.no-flexgap .stepper > * + *,
+.no-flexgap .toast > * + *,
+.no-flexgap .card-head > * + *,
+.no-flexgap .order-foot > * + *,
+.no-flexgap .done-row > * + *,
+.no-flexgap .kitem > * + *,
+.no-flexgap .rueckgeld > * + *,
+.no-flexgap .nav-link > * + * { margin-left: 8px; }
+.no-flexgap .header > * + * { margin-left: 16px; }
+.no-flexgap .order-foot > * + * { margin-left: 8px; }
+
+/* Text ist kein Element und bekommt keinen Margin – darum am Element daneben */
+.no-flexgap .btn:not(.btn-icon) > .icon,
+.no-flexgap .btn > .badge,
+.no-flexgap .status > .dot,
+.no-flexgap .wait > .icon { margin-right: 6px; }
+.no-flexgap .switch > input { margin-right: 10px; }
+.no-flexgap .btn > .hide-sm,
+.no-flexgap .nav-link > .nav-count,
+.no-flexgap .sec-title > .badge,
+.no-flexgap h2 > .badge { margin-left: 6px; }
+
+/* Spalten */
+.no-flexgap .stack > * + *,
+.no-flexgap .order > * + *,
+.no-flexgap .settings > * + *,
+.no-flexgap .station > * + * { margin-top: 12px; }
+.no-flexgap .toasts > * + * { margin-top: 8px; }
+.no-flexgap .pmeta > * + * { margin-top: 4px; }
+.no-flexgap .loading > * + * { margin-top: 14px; }
+.no-flexgap .station > * + * { margin-top: 6px; }
+
+/* ---------- Kein CSS-Grid (Chrome < 57): Flexbox mit Umbruch ---------- */
+@supports not (display: grid) {
+  html .tiles, html .order-grid, html .front-grid, html .stationen, html .kpis, html .charts, html .geld, html .klist {
+    display: flex; flex-wrap: wrap; margin: -6px;
+  }
+  html .tiles > *, html .order-grid > *, html .front-grid > *, html .stationen > *, html .kpis > *, html .charts > *, html .geld > *, html .klist > * {
+    margin: 6px;
+  }
+  html .tiles > * { flex: 1 1 170px; max-width: 280px; }
+  html .order-grid > * { flex: 1 1 290px; max-width: 440px; }
+  html .front-grid > * { flex: 0 0 6.6em; }
+  html .stationen > * { flex: 1 1 240px; }
+  html .kpis > * { flex: 1 1 180px; }
+  html .charts > * { flex: 1 1 420px; min-width: 0; }
+  html .geld > * { flex: 0 0 calc(20% - 12px); min-width: 0; }
+  html .geld > .passend { flex-basis: calc(40% - 12px); }
+  html .klist > * { flex: 1 1 260px; }
+  html .kpis, html .charts { margin-top: 10px; }
+
+  /* Zweispaltige Seiten */
+  html .kasse, html .ausgabe, html .front-body { display: flex; align-items: flex-start; }
+  html .kasse > .produkte, html .ausgabe > :first-child, html .front-body > :first-child { flex: 1; min-width: 0; }
+  html .kasse > .korb { flex: 0 0 380px; margin-left: 20px; }
+  html .ausgabe > .abgeholt { flex: 0 0 360px; margin-left: 24px; }
+  html .front-body > .front-menu { flex: 0 0 38%; margin-left: 32px; }
+  @media (max-width: 1000px) {
+    html .kasse, html .ausgabe, html .front-body { display: block; }
+    html .kasse > .korb, html .ausgabe > .abgeholt, html .front-body > .front-menu { margin: 20px 0 0; }
+  }
+
+  html .positionen li { display: flex; align-items: center; }
+  html .positionen li > * + * { margin-left: 10px; }
+  html .pos-name { flex: 1; }
+  html .pos-sum { width: 76px; }
+
+  html .pitem { display: flex; flex-wrap: wrap; align-items: flex-end; }
+  html .pitem > * { margin: 0 10px 8px 0; }
+  html .pname { flex: 1 1 160px; }
+  html .pdesc { flex: 2 1 220px; }
+  html .pnum { flex: 0 0 96px; }
+  html .pmeta { flex: 0 0 120px; }
+  html .pactions { flex: 0 0 196px; }
+}

@@ -1,0 +1,5 @@
+# Nur für Tests: python -m pytest tests   und   python tests/e2e.py
+-r requirements.txt
+pytest
+websocket-client
+playwright

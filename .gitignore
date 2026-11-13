@@ -1,0 +1,10 @@
+*.db
+*.db-wal
+*.db-shm
+*.bak
+env/
+venv/
+__pycache__/
+diagramms/
+.pytest_cache/
+printer_files/logo.png
