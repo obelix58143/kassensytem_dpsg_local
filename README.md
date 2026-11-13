@@ -32,8 +32,8 @@ Kasse, Ausgabe und Kundendisplay sind beliebige Geräte mit Browser im selben WL
 
 ## Schnellstart
 
-Voraussetzungen: Linux (z.B. Raspberry Pi OS, Debian, Ubuntu) mit **Python ≥ 3.10** (inkl. `python3-venv`)
-und **Node.js ≥ 20.19** (nur zum einmaligen Bauen der Oberfläche).
+Voraussetzungen: Linux (z.B. Raspberry Pi OS, Debian, Ubuntu) mit **Python ≥ 3.11** (inkl. `python3-venv`,
+getestet bis 3.15) und **Node.js ≥ 20.19** (nur zum einmaligen Bauen der Oberfläche, getestet mit 26 LTS).
 
 ```bash
 git clone https://github.com/obelix58143/kassensytem_dpsg_local.git kasse
@@ -137,7 +137,8 @@ cd frontend && npm ci && npm run dev  # Oberfläche mit Hot-Reload auf :5173 (le
 ### Tests
 
 Bei jedem Push laufen alle Tests automatisch auf GitHub (Actions → „Tests"): Backend mit Python 3.11
-und 3.13, Bau der Oberfläche und die Browser-Tests (normal und als alter Android-Browser).
+(Raspberry Pi OS Bookworm), 3.13 (Trixie) und 3.15, Bau der Oberfläche mit Node 26 LTS und die
+Browser-Tests (normal und als alter Android-Browser).
 Lokal:
 
 ```bash

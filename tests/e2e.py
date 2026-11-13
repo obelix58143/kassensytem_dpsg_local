@@ -30,10 +30,13 @@ try { Object.defineProperty(Crypto.prototype, 'randomUUID', {value: undefined}) 
 SIM_POST = """() => {
   if (document.getElementById('sim')) return;
   document.documentElement.classList.add('no-flexgap');
+  // Grid-Fallbacks erzwingen (Schreibweise je nach Minifier mit/ohne Leerzeichen)
+  let n = 0;
   [].forEach.call(document.querySelectorAll('style'), s => {
-    if (s.textContent.indexOf('@supports not (display: grid)') >= 0)
-      s.textContent = s.textContent.split('@supports not (display: grid)').join('@supports (display: grid)');
+    const neu = s.textContent.replace(/@supports not \(display:\s*grid\)/g, () => { n++; return '@supports (display: grid)'; });
+    if (neu !== s.textContent) s.textContent = neu;
   });
+  if (!n) throw new Error('Grid-Fallback-CSS nicht gefunden – Simulation wäre wirkungslos');
   const st = document.createElement('style'); st.id = 'sim';
   st.textContent = '*{gap:0 !important;row-gap:0 !important;column-gap:0 !important}';
   document.head.appendChild(st);
