@@ -14,7 +14,17 @@ const el = ref(null)
 const Plotly = shallowRef(null)
 const themeVer = ref(0)
 let ro = null
-const onResize = () => { if (el.value && Plotly.value) Plotly.value.Plots.resize(el.value) }
+let resizeTimer = null
+// Gebündelt (alte Browser feuern resize sehr oft); Plotly lehnt das Promise ab, wenn das Chart
+// gerade nicht sichtbar ist oder noch aufgebaut wird – das ist harmlos und wird abgefangen.
+const onResize = () => {
+  clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(() => {
+    if (!el.value || !Plotly.value) return
+    const r = Plotly.value.Plots.resize(el.value)
+    if (r && r.catch) r.catch(() => {})
+  }, 100)
+}
 
 // Validierte Referenzpalette (dataviz/palette.md), feste Reihenfolge
 const PALETTE = {
@@ -82,7 +92,8 @@ watchEffect(() => {
   if (!Plotly.value || !el.value) return
   const t = readTheme()
   const { data, layout } = props.spec(t)
-  Plotly.value.react(el.value, data, merge(baseLayout(t), layout), config)
+  const r = Plotly.value.react(el.value, data, merge(baseLayout(t), layout), config)
+  if (r && r.catch) r.catch((e) => console.warn('Chart konnte nicht gezeichnet werden', e))
 })
 
 const onTheme = () => { themeVer.value++ }
@@ -100,6 +111,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  clearTimeout(resizeTimer)
   if (ro) ro.disconnect()
   window.removeEventListener('resize', onResize)
   window.removeEventListener('themechange', onTheme)

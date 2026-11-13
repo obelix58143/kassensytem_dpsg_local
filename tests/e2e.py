@@ -27,7 +27,7 @@ SIM_INIT = """
 delete window.AbortController; delete window.ResizeObserver;
 try { Object.defineProperty(Crypto.prototype, 'randomUUID', {value: undefined}) } catch (e) {}
 """
-SIM_POST = """() => {
+SIM_POST = r"""() => {
   if (document.getElementById('sim')) return;
   document.documentElement.classList.add('no-flexgap');
   // Grid-Fallbacks erzwingen (Schreibweise je nach Minifier mit/ohne Leerzeichen)
@@ -45,9 +45,21 @@ SIM_POST = """() => {
 ergebnisse = []
 
 
+IN_CI = os.environ.get("GITHUB_ACTIONS") == "true"
+
+
+def ci_fehler(titel, text):
+    """Auf GitHub als Annotation sichtbar (oben im Actions-Lauf, auch ohne Log-Zugriff)"""
+    if IN_CI:
+        text = str(text).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::error title={titel}::{text}", flush=True)
+
+
 def check(name, ok, info=""):
     ergebnisse.append((name, bool(ok), info))
-    print(f"  {'✓' if ok else '✗'} {name}{'' if ok else '  -> ' + str(info)}")
+    print(f"  {'✓' if ok else '✗'} {name}{'' if ok else '  -> ' + str(info)}", flush=True)
+    if not ok:
+        ci_fehler("E2E-Prüfung fehlgeschlagen", f"{name} -> {info}")
 
 
 def api(method, path, body=None):
@@ -63,6 +75,32 @@ def api(method, path, body=None):
 
 def state():
     return api("GET", "/state")
+
+
+def bis(bedingung, timeout=5.0):
+    """Wartet, bis bedingung() wahr ist (statt fester Pausen – robust auf langsamen und schnellen Rechnern)"""
+    ende = time.time() + timeout
+    while True:
+        try:
+            if bedingung():
+                return True
+        except Exception:
+            pass
+        if time.time() > ende:
+            return False
+        time.sleep(0.1)
+
+
+def genau(zaehler, soll, nachlauf=0.6):
+    """Wert erreicht soll UND bleibt dort (fängt verspätete Doppel-Bestellungen ab)"""
+    if not bis(lambda: zaehler() >= soll):
+        return False
+    time.sleep(nachlauf)
+    return zaehler() == soll
+
+
+def anzahl_bestellungen():
+    return len(state()["bestellungen"])
 
 
 class Server:
@@ -98,6 +136,7 @@ def main():
     ap.add_argument("--sim-alt", action="store_true")
     ap.add_argument("--dist", default=os.path.join(ROOT, "frontend", "dist"))
     ap.add_argument("--shots", default=None, help="Ordner für Screenshots")
+    ap.add_argument("--drossel", type=float, default=1, help="CPU künstlich verlangsamen (z.B. 4 = 4× langsamer)")
     args = ap.parse_args()
 
     tmp = tempfile.mkdtemp()
@@ -105,6 +144,11 @@ def main():
     server.start()
     try:
         lauf(args, server)
+    except Exception as e:
+        import traceback
+        letzte = [str(z).strip() for z in traceback.extract_tb(e.__traceback__) if z.filename.endswith("e2e.py")][-1:]
+        ci_fehler("E2E abgebrochen", f"{type(e).__name__}: {e} | {letzte}")
+        raise
     finally:
         server.stop()
     ok = sum(1 for _, o, _ in ergebnisse if o)
@@ -134,6 +178,8 @@ def lauf(args, server):
 
         def seite(pfad):
             pg = ctx.new_page()
+            if args.drossel > 1:  # langsames Gerät / langsamer CI-Server nachbilden
+                ctx.new_cdp_session(pg).send("Emulation.setCPUThrottlingRate", {"rate": args.drossel})
             # Erwartete Netzwerkfehler (4xx-Tests, absichtlicher Server-Neustart) ignorieren
             erwartet = ("status of 4", "net::ERR_", "WebSocket connection to")
             pg.on("console", lambda m: m.type == "error" and not any(e in m.text for e in erwartet) and konsole.append(m.text))
@@ -192,15 +238,13 @@ def lauf(args, server):
         n0 = len(state()["bestellungen"])
         tile(kasse, "Flammkuchen").click()
         kasse.locator("button", has_text="Bestellung aufgeben").dblclick()
-        time.sleep(0.8)
-        check("Doppelklick erzeugt genau 1 Bestellung", len(state()["bestellungen"]) == n0 + 1)
+        check("Doppelklick erzeugt genau 1 Bestellung", genau(anzahl_bestellungen, n0 + 1))
         tile(kasse, "Flammkuchen").click()
         kasse.keyboard.press("Escape")
         check("Escape leert den Warenkorb", kasse.locator(".positionen li").count() == 0)
         tile(kasse, "Flammkuchen").click()
         kasse.keyboard.press("Enter")
-        time.sleep(0.8)
-        check("Enter gibt auf (genau 1 neue)", len(state()["bestellungen"]) == n0 + 2)
+        check("Enter gibt auf (genau 1 neue)", genau(anzahl_bestellungen, n0 + 2))
 
         print("Pfandrückgabe")
         offen_vorher = ausgabe.locator(".order").count()
@@ -214,7 +258,7 @@ def lauf(args, server):
         shot(kasse, "pfand")
         kasse.locator(".korb .btn-primary.btn-lg").click()
         check("Toast 'Pfand ausgezahlt: 4,00 €'", toast(kasse, "Pfand ausgezahlt: 4,00"))
-        time.sleep(0.5)
+        time.sleep(0.5)  # eine evtl. falsche Karte hätte Zeit aufzutauchen
         check("Rückgabe erscheint nicht in der Ausgabe", ausgabe.locator(".order").count() == offen_vorher)
         check("…und nicht unter 'Zuletzt abgeholt'", "Tasse" not in ausgabe.locator(".abgeholt").inner_text())
         tile(kasse, "Glühwein").click()
@@ -239,12 +283,11 @@ def lauf(args, server):
         ausgabe.locator(".phase-bereit button", has_text="Abgeholt").first.click()
         ausgabe.wait_for_selector(".toast button:has-text('Rückgängig')", timeout=3000)
         ausgabe.locator(".toast button", has_text="Rückgängig").last.click()
-        time.sleep(0.6)
-        b = next(x for x in state()["bestellungen"] if str(x["id"]) == nr)
-        check("Rückgängig nach Abholen -> wieder 'bereit'", b["status"] == "bereit", b["status"])
+        status_von = lambda: next(x for x in state()["bestellungen"] if str(x["id"]) == nr)["status"]  # noqa: E731
+        check("Rückgängig nach Abholen -> wieder 'bereit'", bis(lambda: status_von() == "bereit"), status_von())
         settings.locator("label.switch", has_text="Abholbereit").click()
-        time.sleep(0.6)
-        check("Modus aus: 'bereit'-Bestellung bleibt sichtbar (Badge)", ausgabe.locator(".order .badge-ok", has_text="bereit").count() == 1)
+        check("Modus aus: 'bereit'-Bestellung bleibt sichtbar (Badge)",
+              bis(lambda: ausgabe.locator(".order .badge-ok", has_text="bereit").count() == 1))
 
         print("Konflikte zwischen Geräten")
         kasse2 = seite("/kasse")
@@ -255,12 +298,12 @@ def lauf(args, server):
             tile(k, "Flammkuchen").click()
             k.locator(".chip", has_text="Blau 2").click()
         kasse.locator("button", has_text="Bestellung aufgeben").click()
-        time.sleep(0.8)
-        check("Andere Kasse: Karte automatisch abgewählt", kasse2.locator(".chip[aria-pressed=true]").inner_text().strip() == "Ohne")
+        check("Andere Kasse: Karte automatisch abgewählt",
+              bis(lambda: kasse2.locator(".chip[aria-pressed=true]").inner_text().strip() == "Ohne"))
         tile(kasse2, "Glühwein").click()
         pitem(settings, "Glühwein").locator("label.switch").click()  # deaktivieren
-        time.sleep(0.8)
-        check("Deaktiviertes Produkt fliegt aus fremdem Warenkorb", "Glühwein" not in kasse2.locator(".positionen").inner_text())
+        check("Deaktiviertes Produkt fliegt aus fremdem Warenkorb",
+              bis(lambda: "Glühwein" not in kasse2.locator(".positionen").inner_text()))
         pitem(settings, "Glühwein").locator("label.switch").click()  # wieder an
 
         print("Einstellungen: Entwurf überlebt Live-Updates")
@@ -268,7 +311,7 @@ def lauf(args, server):
         feld = zeile.locator("input").first
         feld.fill("Flammkuchen XL")
         api("POST", "/karten", {"beschreibung": "Grün 3"})
-        time.sleep(0.8)
+        check("Live-Update ist angekommen", bis(lambda: settings.locator(".kitem").count() >= 3))
         check("Getippter Name nicht überschrieben", feld.input_value() == "Flammkuchen XL")
         zeile.locator("button", has_text="Speichern").click()
         kasse.wait_for_selector(".tile:has-text('Flammkuchen XL')", timeout=3000)
@@ -280,13 +323,13 @@ def lauf(args, server):
         if args.sim_alt:
             settings.evaluate(SIM_POST)
         settings.locator(".drucker .card-head label.switch").click()
-        time.sleep(0.8)
+        check("Einstellung gespeichert", bis(lambda: state()["einstellungen"]["drucker_aktiv"] is False))
         check("Drucker aus: Button 'Nummer drucken' an der Kasse weg",
-              kasse.locator("button", has_text="Nummer der letzten Bestellung").count() == 0)
-        check("Drucker aus: Bon-Icon in der Ausgabe weg", ausgabe.locator("button[aria-label='Bon nachdrucken']").count() == 0)
-        check("Einstellung gespeichert", state()["einstellungen"]["drucker_aktiv"] is False)
+              bis(lambda: kasse.locator("button", has_text="Nummer der letzten Bestellung").count() == 0))
+        check("Drucker aus: Bon-Icon in der Ausgabe weg",
+              bis(lambda: ausgabe.locator("button[aria-label='Bon nachdrucken']").count() == 0))
         settings.locator(".drucker .card-head label.switch").click()
-        time.sleep(0.6)
+        bis(lambda: state()["einstellungen"]["drucker_aktiv"] is True)
         settings.locator(".drucker input[placeholder='/dev/usb/lp0']").fill("/etc/passwd")
         settings.locator(".drucker button", has_text="Speichern").click()
         check("Ungültiges Druckergerät wird abgelehnt", toast(settings, "Ungültiges Druckergerät"))
@@ -294,7 +337,7 @@ def lauf(args, server):
         settings.locator(".drucker textarea").first.fill("Danke & guten Hunger!")
         settings.locator(".drucker select").nth(1).select_option("80")
         settings.locator(".drucker button", has_text="Speichern").click()
-        time.sleep(0.6)
+        bis(lambda: state()["einstellungen"]["bon_breite_mm"] == 80)
         e = state()["einstellungen"]
         check("Bon-Kopf + Papierbreite gespeichert", e["bon_kopf"] == "Danke & guten Hunger!" and e["bon_breite_mm"] == 80, e)
         name = settings.locator("label.field", has_text="Name der Kasse").locator("input")
@@ -315,8 +358,8 @@ def lauf(args, server):
         check("Logo im Zustand nur als Flag", state()["einstellungen"]["bon_logo_vorhanden"] is True)
         settings.locator(".drucker textarea.sprueche").fill("Erster Spruch\n\nZweiter\nmit Umbruch")
         settings.locator(".drucker button", has_text="Speichern").click()
-        time.sleep(0.6)
-        check("Sprüche gespeichert", state()["einstellungen"]["bon_sprueche_liste"] == ["Erster Spruch", "Zweiter\nmit Umbruch"],
+        soll = ["Erster Spruch", "Zweiter\nmit Umbruch"]
+        check("Sprüche gespeichert", bis(lambda: state()["einstellungen"]["bon_sprueche_liste"] == soll),
               state()["einstellungen"]["bon_sprueche_liste"])
         settings.locator("button", has_text="Jetzt sichern").click()
         check("Sicherung per Knopfdruck", toast(settings, "Gesichert"))
@@ -339,9 +382,8 @@ def lauf(args, server):
         check("Fehler-Toast bei verlorener Antwort", toast(kasse, "nicht erreichbar"))
         check("Warenkorb bleibt erhalten", kasse.locator(".positionen li").count() == 1)
         kasse.locator("button", has_text="Bestellung aufgeben").click()
-        time.sleep(0.8)
+        check("Erneutes Senden -> trotzdem nur 1 Bestellung", genau(anzahl_bestellungen, n0 + 1, nachlauf=1.0))
         kasse.unroute("**/api/bestellungen")
-        check("Erneutes Senden -> trotzdem nur 1 Bestellung", len(state()["bestellungen"]) == n0 + 1)
 
         server.stop()
         kasse.wait_for_selector(".status.is-off", timeout=5000)
@@ -355,8 +397,7 @@ def lauf(args, server):
         check("Automatisch wieder verbunden", kasse.locator(".offline").count() == 0)
         n0 = len(state()["bestellungen"])
         kasse.locator("button", has_text="Bestellung aufgeben").click()
-        time.sleep(0.8)
-        check("Nach Reconnect: offline gebliebener Warenkorb geht durch", len(state()["bestellungen"]) == n0 + 1)
+        check("Nach Reconnect: offline gebliebener Warenkorb geht durch", genau(anzahl_bestellungen, n0 + 1))
 
         print("Storno")
         ausgabe.reload()
@@ -366,8 +407,7 @@ def lauf(args, server):
         n0 = len(state()["bestellungen"])
         ausgabe.locator(".order").first.locator("button[aria-label=Stornieren]").click()
         ausgabe.locator("dialog button", has_text="Stornieren").click()
-        time.sleep(0.6)
-        check("Storno über Dialog", len(state()["bestellungen"]) == n0 - 1)
+        check("Storno über Dialog", bis(lambda: anzahl_bestellungen() == n0 - 1))
 
         print("Alle Seiten: Darstellung, XSS, Fehler")
         for pfad in ["/", "/kasse", "/ausgabe", "/front", "/statistik", "/settings"]:
@@ -396,8 +436,13 @@ def lauf(args, server):
             check(f"{pfad}: kein XSS ausgeführt", pg.evaluate("window.__xss") is None)
             for w in (390, 800):
                 pg.set_viewport_size({"width": w, "height": 900})
-                time.sleep(0.2)
-                sw = pg.evaluate("document.documentElement.scrollWidth")
+                # Charts passen sich nach dem Resize kurz verzögert an -> bis 3 s auf ruhiges Layout warten
+                ende, sw = time.time() + 3, None
+                while time.time() < ende:
+                    sw = pg.evaluate("document.documentElement.scrollWidth")
+                    if sw <= w:
+                        break
+                    time.sleep(0.1)
                 check(f"{pfad} @{w}px: kein horizontales Scrollen", sw <= w, sw)
             pg.close()
         br.close()
