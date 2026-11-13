@@ -1,5 +1,7 @@
 # Kasse – lokales Kassen- & Bestellsystem für Stände und Feste
 
+[![Tests](https://github.com/obelix58143/kassensytem_dpsg_local/actions/workflows/tests.yml/badge.svg)](https://github.com/obelix58143/kassensytem_dpsg_local/actions/workflows/tests.yml)
+
 Ein einfaches, robustes Kassensystem für Essens- und Getränkestände (Weihnachtsmarkt, Sommerfest,
 Lagerfeuer-Abend …). Läuft komplett **lokal ohne Internet** auf einem Laptop oder Raspberry Pi;
 Kasse, Ausgabe und Kundendisplay sind beliebige Geräte mit Browser im selben WLAN und werden
@@ -133,6 +135,10 @@ cd frontend && npm ci && npm run dev  # Oberfläche mit Hot-Reload auf :5173 (le
 ```
 
 ### Tests
+
+Bei jedem Push laufen alle Tests automatisch auf GitHub (Actions → „Tests"): Backend mit Python 3.11
+und 3.13, Bau der Oberfläche und die Browser-Tests (normal und als alter Android-Browser).
+Lokal:
 
 ```bash
 ./venv/bin/python -m pytest tests                 # Backend: Migration, API, Pfand, Nebenläufigkeit,
