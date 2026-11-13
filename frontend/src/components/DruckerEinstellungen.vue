@@ -9,6 +9,29 @@ const FELDER = ['drucker_verbindung', 'drucker_geraet', 'drucker_host', 'drucker
 
 // Entwurf: Live-Updates überschreiben nichts, was gerade bearbeitet wird
 const entwurf = reactive({})
+const logoVersion = ref(Date.now())
+const logoInput = ref(null)
+
+// Sprüche: im Textfeld durch eine Leerzeile getrennt, Zeilenumbrüche im Spruch bleiben erhalten
+const spruecheText = computed(() =>
+  'bon_sprueche_liste' in entwurf ? entwurf.bon_sprueche_liste : (state.einstellungen.bon_sprueche_liste || []).join('\n\n'))
+const spruecheAnzahl = computed(() => spruecheText.value.split(/\n\s*\n/).filter(x => x.trim()).length)
+
+async function logoWaehlen(e) {
+  const datei = e.target.files && e.target.files[0]
+  e.target.value = ''
+  if (!datei) return
+  busy.value = true
+  try {
+    const r = await api.logoHochladen(datei)
+    logoVersion.value = Date.now()
+    if (!state.einstellungen.bon_logo) await api.setEinstellungen({ bon_logo: true })
+    toast(`Logo gespeichert (${r.breite} × ${r.hoehe} px)`, 'ok')
+  } catch (err) { showError(err) } finally { busy.value = false }
+}
+async function logoEntfernen() {
+  try { await api.logoLoeschen(); toast('Logo entfernt', 'ok') } catch (e) { showError(e) }
+}
 const wert = (k) => (k in entwurf ? entwurf[k] : state.einstellungen[k])
 const setze = (k, v) => { entwurf[k] = v }
 const geaendert = computed(() => Object.keys(entwurf).length > 0)
@@ -32,6 +55,7 @@ async function speichern() {
   for (const k of Object.keys(entwurf)) {
     let v = entwurf[k]
     if (k === 'drucker_port' || k === 'bon_breite_mm' || k === 'bon_gewinn_alle') v = parseInt(v, 10) || 0
+    if (k === 'bon_sprueche_liste') v = v.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean)
     daten[k] = v
   }
   busy.value = true
@@ -126,10 +150,26 @@ defineExpose({ FELDER })
         <label class="switch"><input type="checkbox" :checked="wert('bon_sprueche')" @change="setze('bon_sprueche', $event.target.checked)"> Zufälliger Spruch</label>
         <label class="switch"><input type="checkbox" :checked="wert('bon_logo')" @change="setze('bon_logo', $event.target.checked)"> Logo</label>
       </div>
-      <p class="muted hinweis">
-        Logo: Datei <code>printer_files/logo.png</code> auf dem Server ablegen (max. 384 px breit bei 58 mm, 576 px bei 80 mm).
-        Sprüche: <code>printer_files/sprueche.json</code>.
-      </p>
+
+      <div class="logo-box">
+        <div class="logo-vorschau">
+          <img v-if="state.einstellungen.bon_logo_vorhanden" :src="'/api/drucker/logo.png?v=' + logoVersion" alt="Bon-Logo">
+          <span v-else class="muted">Kein Logo</span>
+        </div>
+        <div class="stack" style="gap: 8px">
+          <strong>Logo für den Bon</strong>
+          <span class="muted hinweis">PNG oder JPG, wird automatisch schwarz-weiß und passend verkleinert.</span>
+          <div class="row">
+            <button type="button" class="btn btn-sm" :disabled="busy" @click="logoInput.click()">Bild auswählen …</button>
+            <button v-if="state.einstellungen.bon_logo_vorhanden" type="button" class="btn btn-sm btn-danger" @click="logoEntfernen">Entfernen</button>
+          </div>
+          <input ref="logoInput" type="file" accept="image/png,image/jpeg,image/gif,image/bmp" class="sr-only" @change="logoWaehlen">
+        </div>
+      </div>
+
+      <label class="field">Sprüche ({{ spruecheAnzahl }}) – je Spruch ein Absatz, getrennt durch eine Leerzeile
+        <textarea class="sprueche" :value="spruecheText" rows="8" @input="setze('bon_sprueche_liste', $event.target.value)"></textarea>
+      </label>
 
       <div class="row">
         <button class="btn btn-primary" :disabled="!geaendert || busy" @click="speichern">Speichern</button>
@@ -147,6 +187,11 @@ defineExpose({ FELDER })
 .grid2.inner { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 .drucker .schalter { gap: 18px; }
 .drucker .hinweis { font-size: .85rem; }
+.logo-box { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.logo-vorschau { width: 200px; height: 110px; display: flex; align-items: center; justify-content: center; background: #fff; border-radius: 6px; border: 1px dashed var(--border-strong); overflow: hidden; }
+.logo-vorschau img { max-width: 100%; max-height: 100%; }
+.drucker textarea.sprueche { min-height: 180px; font-family: inherit; }
+.no-flexgap .logo-box > * + * { margin-left: 16px; }
 .drucker code { font-size: .85em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
 .no-flexgap .drucker-form > * + * { margin-top: 14px; }
 @supports not (display: grid) {

@@ -20,7 +20,8 @@ Kasse, Ausgabe und Kundendisplay sind beliebige Geräte mit Browser im selben WL
 - **Bondrucker** (ESC/POS) – USB oder Netzwerk, 58/80 mm, Kopf-/Fußzeile, Logo, Sprüche,
   „jede N-te Bestellung gewinnt", alles in der Oberfläche einstellbar und abschaltbar
 - **Robust** – automatische Wiederverbindung bei WLAN-Aussetzern, keine doppelten Bestellungen
-  bei Timeouts, Preise werden serverseitig berechnet, automatische Backups bei Updates/Reset
+  bei Timeouts, Preise werden serverseitig berechnet, jede bestätigte Buchung überlebt auch einen
+  harten Absturz, automatische Sicherungen alle 5 Minuten
 - **Läuft auf alten Tablets** – getestet bis zu einem Android-7-Browser (Chrome/WebView ab Version 53)
 
 | Ausgabe (mit „Abholbereit") | Kundendisplay | Statistik |
@@ -63,9 +64,10 @@ Alles Weitere unter **Einstellungen → Bondrucker** (an/aus, Verbindung, Papier
 - **USB:** Drucker erscheint meist als `/dev/usb/lp0`. Der Benutzer, unter dem der Server läuft,
   braucht Schreibrechte – in der Regel genügt `sudo usermod -aG lp $USER` (danach neu anmelden).
 - **Netzwerk:** IP-Adresse des Druckers eintragen, Port meist `9100`.
-- **Logo:** eigene Datei als `printer_files/logo.png` ablegen (max. 384 px breit bei 58 mm,
-  576 px bei 80 mm) und in den Einstellungen „Logo" aktivieren.
-- **Sprüche:** `printer_files/sprueche.json` (Liste von Texten, `\n` = Zeilenumbruch).
+- **Logo:** in den Einstellungen hochladen (PNG/JPG) – wird automatisch schwarz-weiß und auf die
+  Papierbreite verkleinert.
+- **Sprüche:** direkt in den Einstellungen bearbeiten (ein Spruch pro Absatz). Die mitgelieferte
+  Liste `printer_files/sprueche.json` ist nur der Startwert.
 
 Ist kein Drucker angeschlossen, funktioniert alles weiter – die Kasse zeigt nur einen Hinweis,
 und Bons lassen sich später in der Ausgabe nachdrucken.
@@ -92,13 +94,23 @@ sudo systemctl enable --now kasse
   Geräte in `%UserProfile%\.wslconfig` unter `[wsl2]` die Zeile `networkingMode=mirrored`
   eintragen, WSL neu starten und Port 5000 in der Windows-Firewall freigeben.
 
-## Daten & Backups
+## Daten, Sicherungen & Stromausfall
 
-- Alle Daten liegen in einer SQLite-Datei `data.db` im Programmordner (andere Datei: `KASSE_DB=/pfad/data.db`).
-- Vor jeder Schema-Aktualisierung und vor „Alle Daten zurücksetzen" wird automatisch eine Kopie
-  `data.db.<grund>-<datum>.bak` angelegt.
-- **Einstellungen → Daten → CSV** exportiert alle Bestellungen (öffnet sich direkt in Excel/LibreOffice).
-- Für eine neue Veranstaltung: Einstellungen → „Hard Reset" (mit Backup).
+- Alle Daten (inkl. Einstellungen und Logo) liegen in einer SQLite-Datei `data.db` im Programmordner –
+  immer dort, egal aus welchem Ordner der Server gestartet wird (andere Datei: `KASSE_DB=/pfad/data.db`).
+- **Stromausfall/Absturz:** Jede Buchung wird auf die Platte geschrieben, *bevor* die Kasse „OK" bekommt
+  (SQLite WAL + `synchronous=FULL`). Getestet: mehrfaches hartes Abschießen des Servers mitten im
+  Betrieb – keine bestätigte Bestellung ging verloren.
+- **Automatische Sicherungen** nach `backups/`: beim Start, alle 5 Minuten (nur wenn sich etwas
+  geändert hat) und beim Beenden; die letzten 72 werden behalten. Jede Sicherung wird vor dem
+  Speichern auf Fehlerfreiheit geprüft. Tipp: `KASSE_BACKUP_DIR` auf einen USB-Stick zeigen lassen.
+- **Einstellungen → Daten & Sicherungen:** „Jetzt sichern", Datenbank herunterladen (z.B. aufs Handy),
+  CSV-Export aller Bestellungen.
+- **Wiederherstellen:** Server stoppen, gewünschte Datei aus `backups/` als `data.db` in den
+  Programmordner kopieren (alte `data.db-wal`/`data.db-shm` vorher löschen), Server starten.
+- Vor jeder Schema-Aktualisierung und vor „Hard Reset" wird zusätzlich `data.db.<grund>-<datum>.bak` angelegt.
+- Für eine neue Veranstaltung: Einstellungen → „Hard Reset" – löscht Bestellungen, Produkte und Karten,
+  behält die Einstellungen (Name, Drucker, Logo, Sprüche).
 
 ### Umgebungsvariablen
 
@@ -108,6 +120,9 @@ sudo systemctl enable --now kasse
 | `KASSE_DB` | `./data.db` | Datenbankdatei |
 | `PRINTER_DEV` | – | Druckergerät fest vorgeben (überschreibt die Einstellung) |
 | `KASSE_DIST` | `frontend/dist` | Ordner der gebauten Oberfläche |
+| `KASSE_BACKUP_DIR` | `./backups` | Ordner für automatische Sicherungen |
+| `KASSE_BACKUP_MINUTEN` | `5` | Abstand der Sicherungen (0 = aus) |
+| `KASSE_BACKUP_BEHALTEN` | `72` | Anzahl aufbewahrter Sicherungen |
 
 ## Entwicklung
 
@@ -121,7 +136,7 @@ cd frontend && npm ci && npm run dev  # Oberfläche mit Hot-Reload auf :5173 (le
 
 ```bash
 ./venv/bin/python -m pytest tests                 # Backend: Migration, API, Pfand, Nebenläufigkeit,
-                                                  # WebSocket, Drucker, Performance
+                                                  # WebSocket, Drucker, Absturz (kill -9), Sicherungen
 ./venv/bin/playwright install chromium
 ./venv/bin/python tests/e2e.py                    # Browser: mehrere Geräte, Konflikte, Offline, …
 ./venv/bin/python tests/e2e.py --sim-alt          # dasselbe als simulierter alter Android-Browser
@@ -152,6 +167,8 @@ cd frontend && npm ci && npm run dev  # Oberfläche mit Hot-Reload auf :5173 (le
 | POST/PUT/DELETE | `/api/karten[/<id>]` | `{beschreibung}` |
 | GET / PUT | `/api/einstellungen` (über `/api/state`) | z.B. `{titel, bereit_aktiv, drucker_aktiv, bon_kopf, …}` |
 | GET · POST | `/api/drucker` · `/api/drucker/test` | Status · Testdruck |
+| PUT · GET · DELETE | `/api/drucker/logo` (GET: `/api/drucker/logo.png`) | Bilddatei als Body |
+| GET · POST | `/api/sicherungen` · `/api/sicherungen/download` | Liste/jetzt sichern · DB-Datei |
 | GET | `/api/export.csv` | – |
 | POST | `/api/reset` | `{bestaetigung: "RESET"}` |
 

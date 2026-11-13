@@ -62,6 +62,17 @@ export default {
   letzteNummerDrucken: () => call('POST', '/drucker/letzte-nummer'),
   druckerStatus: () => call('GET', '/drucker'),
   druckerTest: () => call('POST', '/drucker/test'),
+  logoLoeschen: () => call('DELETE', '/drucker/logo'),
+  sicherungen: () => call('GET', '/sicherungen'),
+  sicherungJetzt: () => call('POST', '/sicherungen'),
+  /** Bilddatei roh hochladen (kein JSON) */
+  async logoHochladen(datei) {
+    const res = await fetch('/api/drucker/logo', { method: 'PUT', body: datei, headers: { 'Content-Type': datei.type || 'application/octet-stream' } })
+    let data = null
+    try { data = await res.json() } catch { /* leer */ }
+    if (!res.ok) throw new ApiError(res.status === 413 ? 'Datei ist zu groß (max. 2 MB)' : (data && data.error) || `Fehler ${res.status}`, res.status)
+    return data
+  },
 
   createProdukt: (p = {}) => call('POST', '/produkte', p),
   updateProdukt: (id, p) => call('PUT', `/produkte/${id}`, p),

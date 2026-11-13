@@ -215,7 +215,7 @@ def test_bon_ohne_pfandzeilen(api):
 # ---------------------------------------------------------------- Einstellungen, Export, Reset
 
 def test_einstellungen(api):
-    assert api.state()["einstellungen"] == database.EINSTELLUNGEN_STANDARD
+    assert api.state()["einstellungen"] == {**database.EINSTELLUNGEN_STANDARD, "bon_logo_vorhanden": False}
     assert api.put("/api/einstellungen", {"bereit_aktiv": True})[0] == 200
     assert api.state()["einstellungen"]["bereit_aktiv"] is True
     assert api.put("/api/einstellungen", {"bereit_aktiv": "ja"})[0] == 400
@@ -245,7 +245,8 @@ def test_reset(api, db):
     assert s == 200 and d["backup"]
     assert glob.glob(db + ".reset-*.bak")
     st = api.state()
-    assert st["produkte"] == [] and st["bestellungen"] == [] and st["einstellungen"] == database.EINSTELLUNGEN_STANDARD
+    assert st["produkte"] == [] and st["bestellungen"] == []
+    assert st["einstellungen"]["bereit_aktiv"] is True, "Einstellungen überleben den Reset"
     assert api.produkt() == 1, "IDs starten nach Reset wieder bei 1"
 
 

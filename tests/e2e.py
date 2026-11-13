@@ -64,7 +64,8 @@ def state():
 
 class Server:
     def __init__(self, db, dist):
-        self.env = dict(os.environ, KASSE_DB=db, PORT=str(PORT), PRINTER_DEV="/nonexistent", KASSE_DIST=dist)
+        self.env = dict(os.environ, KASSE_DB=db, PORT=str(PORT), PRINTER_DEV="/nonexistent", KASSE_DIST=dist,
+                        KASSE_BACKUP_DIR=os.path.join(os.path.dirname(db), "backups"))
         self.p = None
 
     def start(self):
@@ -299,6 +300,23 @@ def lauf(args, server):
         kasse.wait_for_selector(".brand:has-text('Sommerfest-Kasse')", timeout=3000)
         check("Name live in Kopfzeile (anderes Gerät)", True)
         check("Name im Browser-Tab", "Sommerfest-Kasse" in kasse.title())
+
+        print("Logo, Sprüche, Sicherung")
+        from PIL import Image
+        logo_datei = os.path.join(tempfile.mkdtemp(), "logo.png")
+        Image.new("RGBA", (800, 300), (180, 20, 30, 255)).save(logo_datei)
+        settings.locator(".drucker input[type=file]").set_input_files(logo_datei)
+        check("Logo hochgeladen", toast(settings, "Logo gespeichert"))
+        settings.wait_for_selector(".logo-vorschau img", timeout=3000)
+        check("Logo-Vorschau sichtbar", settings.locator(".logo-vorschau img").evaluate("i => i.complete && i.naturalWidth > 0"))
+        check("Logo im Zustand nur als Flag", state()["einstellungen"]["bon_logo_vorhanden"] is True)
+        settings.locator(".drucker textarea.sprueche").fill("Erster Spruch\n\nZweiter\nmit Umbruch")
+        settings.locator(".drucker button", has_text="Speichern").click()
+        time.sleep(0.6)
+        check("Sprüche gespeichert", state()["einstellungen"]["bon_sprueche_liste"] == ["Erster Spruch", "Zweiter\nmit Umbruch"],
+              state()["einstellungen"]["bon_sprueche_liste"])
+        settings.locator("button", has_text="Jetzt sichern").click()
+        check("Sicherung per Knopfdruck", toast(settings, "Gesichert"))
 
         print("Verbindungsabbruch")
         tile(kasse, "Flammkuchen XL").click()

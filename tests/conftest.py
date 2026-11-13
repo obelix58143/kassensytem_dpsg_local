@@ -116,3 +116,9 @@ def http(base, method, path, body=None, timeout=10):
             return r.status, json.loads(r.read() or b"null")
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read() or b"null")
+
+
+@pytest.fixture(autouse=True)
+def backup_ordner(tmp_path, monkeypatch):
+    """Sicherungen in jedem Test in einen eigenen Ordner"""
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "backups"))

@@ -27,7 +27,8 @@ app = Flask(__name__, static_folder=None)
 app.json.ensure_ascii = False
 sock = Sock(app)
 # Der Drucker liest seine Einstellungen bei jedem Druck frisch aus der Datenbank
-printer.configure(database.get_einstellungen)
+printer.configure(database.get_einstellungen, database.get_logo)
+app.config["MAX_CONTENT_LENGTH"] = 3 * 1024 * 1024  # Logo-Upload
 
 
 # --------------------------------------------------------------------------
@@ -203,6 +204,49 @@ def api_letzte_nummer():
 @app.put("/api/einstellungen")
 def api_einstellungen():
     return _changed(database.set_einstellungen(_body()))
+
+
+@app.put("/api/drucker/logo")
+def api_logo_hochladen():
+    info = database.set_logo(request.get_data())
+    return _changed({"ok": True, **info})
+
+
+@app.get("/api/drucker/logo.png")
+def api_logo():
+    roh = database.get_logo()
+    if roh is None:
+        return jsonify({"error": "Kein Logo hochgeladen"}), 404
+    return Response(roh, mimetype="image/png", headers={"Cache-Control": "no-cache"})
+
+
+@app.delete("/api/drucker/logo")
+def api_logo_loeschen():
+    database.delete_logo()
+    return _changed()
+
+
+@app.get("/api/sicherungen")
+def api_sicherungen():
+    return jsonify({"letzte": database.letzte_sicherung, "ordner": database.BACKUP_DIR,
+                    "dateien": database.sicherungen_auflisten()[:20]})
+
+
+@app.post("/api/sicherungen")
+def api_sicherung_jetzt():
+    ziel = database.sicherung_erstellen("manuell")
+    if not ziel:
+        raise database.DBError(f"Sicherung fehlgeschlagen: {database.letzte_sicherung['fehler']}", 500)
+    return jsonify({"ok": True, "datei": os.path.basename(ziel)})
+
+
+@app.get("/api/sicherungen/download")
+def api_sicherung_download():
+    """Aktuellen Stand als Datei herunterladen (z.B. aufs Handy als zusätzliche Kopie)"""
+    ziel = database.sicherung_erstellen("download")
+    if not ziel:
+        raise database.DBError("Sicherung fehlgeschlagen", 500)
+    return send_from_directory(os.path.dirname(ziel), os.path.basename(ziel), as_attachment=True)
 
 
 @app.post("/api/reset")

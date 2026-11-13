@@ -42,7 +42,14 @@ def _connect():
     con = sqlite3.connect(DB_PATH, timeout=10)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
+    # FULL: jede bestätigte Buchung ist auf der Platte, bevor die Kasse "OK" bekommt –
+    # auch bei Stromausfall (soweit die Hardware fsync ehrlich umsetzt)
+    con.execute("PRAGMA synchronous = FULL")
     return con
+
+
+# Zähler für Änderungen – die automatische Sicherung läuft nur, wenn sich etwas getan hat
+aenderungen = 0
 
 
 @contextmanager
@@ -62,6 +69,8 @@ def _write():
             con.execute("BEGIN IMMEDIATE")
             yield con
             con.commit()
+            global aenderungen
+            aenderungen += 1
         except Exception:
             con.rollback()
             raise
@@ -311,7 +320,7 @@ def hard_reset():
         con.execute("DELETE FROM BESTELLUNGEN")
         con.execute("DELETE FROM PRODUKTE")
         con.execute("DELETE FROM KARTEN")
-        con.execute("DELETE FROM EINSTELLUNGEN")
+        # Einstellungen (Name, Drucker, Logo, Sprüche) bleiben erhalten
         con.execute("DELETE FROM sqlite_sequence")  # IDs starten wieder bei 1
     return backup
 
@@ -387,6 +396,14 @@ def get_state():
         }
 
 
+def _standard_sprueche():
+    try:
+        with open(os.path.join(BASE_DIR, "printer_files", "sprueche.json"), encoding="utf-8") as f:
+            return [x for x in json.load(f) if isinstance(x, str) and x.strip()][:200]
+    except (OSError, ValueError):
+        return []
+
+
 EINSTELLUNGEN_STANDARD = {
     "titel": "Kasse",                 # Name in Kopfzeile, Kundendisplay, Browser-Tab
     "bereit_aktiv": False,            # Zwischenschritt "Bereit zur Abholung" verwenden
@@ -402,7 +419,8 @@ EINSTELLUNGEN_STANDARD = {
     "bon_logo": False,                # druckt printer_files/logo.png, falls vorhanden
     "bon_positionen": True,
     "bon_karte": True,
-    "bon_sprueche": True,             # zufälliger Spruch aus printer_files/sprueche.json
+    "bon_sprueche": True,             # zufälliger Spruch aus bon_sprueche_liste
+    "bon_sprueche_liste": _standard_sprueche(),
     "bon_gewinn_alle": 0,             # jede N-te Bestellung bekommt den Gewinn-Text (0 = aus)
     "bon_gewinn_text": "Glückwunsch! Du bist unsere {n}. Bestellung.",
 }
@@ -435,6 +453,12 @@ def _pruefe_einstellung(key, value):
         raise DBError("Ungültiger Port")
     if key == "bon_breite_mm" and value not in (58, 80):
         raise DBError("Papierbreite muss 58 oder 80 mm sein")
+    if key == "bon_sprueche_liste":
+        if len(value) > 200 or not all(isinstance(x, str) for x in value):
+            raise DBError("Sprüche: Liste von höchstens 200 Texten erwartet")
+        value = [x.strip("\n ") for x in value if x.strip()]
+        if any(len(x) > 300 for x in value):
+            raise DBError("Ein Spruch ist zu lang (max. 300 Zeichen)")
     if key == "bon_gewinn_alle" and not 0 <= value <= 100000:
         raise DBError("Ungültiger Wert für 'jede N-te Bestellung'")
     return value
@@ -445,8 +469,11 @@ def get_einstellungen(con=None):
         with _read() as c:
             return get_einstellungen(c)
     out = dict(EINSTELLUNGEN_STANDARD)
+    # Das Logo selbst (bis ~100 kB) nicht bei jedem Live-Update mitschicken
+    out["bon_logo_vorhanden"] = con.execute(
+        "SELECT 1 FROM EINSTELLUNGEN WHERE schluessel = 'bon_logo_png'").fetchone() is not None
     for r in con.execute("SELECT schluessel, wert FROM EINSTELLUNGEN"):
-        if r["schluessel"] in out:
+        if r["schluessel"] in out and r["schluessel"] != "bon_logo_vorhanden":
             try:
                 out[r["schluessel"]] = json.loads(r["wert"])
             except ValueError:
@@ -465,6 +492,104 @@ def set_einstellungen(data):
             [(k, json.dumps(v)) for k, v in clean.items()],
         )
         return get_einstellungen(con)
+
+
+# ---------- Bon-Logo (in der DB, damit es in jeder Sicherung steckt) ----------
+
+LOGO_MAX_BYTES = 2_000_000
+
+
+def set_logo(roh):
+    """roh: Bilddatei (PNG/JPEG/GIF/BMP). Wird geprüft, auf max. 576 px Breite verkleinert,
+    in Graustufen umgewandelt und ohne Metadaten als PNG gespeichert."""
+    import base64
+    import io
+    from PIL import Image, UnidentifiedImageError
+
+    if not roh or len(roh) > LOGO_MAX_BYTES:
+        raise DBError("Logo fehlt oder ist zu groß (max. 2 MB)")
+    try:
+        img = Image.open(io.BytesIO(roh))
+        img.load()
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise DBError("Das ist keine gültige Bilddatei")
+    if img.width * img.height > 25_000_000:
+        raise DBError("Bild hat zu viele Pixel")
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+        weiss = Image.new("RGBA", img.size, (255, 255, 255, 255))
+        img = Image.alpha_composite(weiss, img)
+    img = img.convert("L")
+    if img.width > 576:
+        img = img.resize((576, max(1, round(img.height * 576 / img.width))), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    with _write() as con:
+        con.execute(
+            "INSERT INTO EINSTELLUNGEN (schluessel, wert) VALUES ('bon_logo_png', ?) "
+            "ON CONFLICT(schluessel) DO UPDATE SET wert = excluded.wert",
+            (json.dumps(base64.b64encode(buf.getvalue()).decode()),),
+        )
+    return {"breite": img.width, "hoehe": img.height}
+
+
+def get_logo():
+    """PNG-Bytes des Logos oder None"""
+    import base64
+    with _read() as con:
+        r = con.execute("SELECT wert FROM EINSTELLUNGEN WHERE schluessel = 'bon_logo_png'").fetchone()
+    return base64.b64decode(json.loads(r["wert"])) if r else None
+
+
+def delete_logo():
+    with _write() as con:
+        con.execute("DELETE FROM EINSTELLUNGEN WHERE schluessel = 'bon_logo_png'")
+
+
+# ---------- Automatische Sicherungen ----------
+
+BACKUP_DIR = os.environ.get("KASSE_BACKUP_DIR", os.path.join(BASE_DIR, "backups"))
+BACKUP_BEHALTEN = int(os.environ.get("KASSE_BACKUP_BEHALTEN", "72"))
+_backup_lock = threading.Lock()
+letzte_sicherung = {"zeit": None, "datei": None, "fehler": None}
+
+
+def sicherung_erstellen(grund="auto"):
+    """Konsistente Kopie der laufenden DB (SQLite-Backup-API, auch während gebucht wird)."""
+    with _backup_lock:
+        try:
+            os.makedirs(BACKUP_DIR, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            ziel = os.path.join(BACKUP_DIR, f"kasse-{stamp}-{grund}.db")
+            tmp = ziel + ".tmp"
+            src = sqlite3.connect(DB_PATH, timeout=10)
+            dst = sqlite3.connect(tmp)
+            try:
+                src.backup(dst)
+                ok = dst.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            finally:
+                dst.close()
+                src.close()
+            if not ok:
+                os.remove(tmp)
+                raise RuntimeError("Sicherung fehlerhaft")
+            os.replace(tmp, ziel)  # erst nach erfolgreicher Prüfung sichtbar
+            alte = sorted(f for f in os.listdir(BACKUP_DIR) if f.startswith("kasse-") and f.endswith(".db"))
+            for f in alte[:-BACKUP_BEHALTEN] if BACKUP_BEHALTEN > 0 else []:
+                os.remove(os.path.join(BACKUP_DIR, f))
+            letzte_sicherung.update(zeit=now_iso(), datei=os.path.basename(ziel), fehler=None)
+            return ziel
+        except Exception as e:  # noqa: BLE001 – Sicherung darf den Betrieb nie stören
+            letzte_sicherung.update(fehler=str(e))
+            print(f"[backup] Fehler: {e}")
+            return None
+
+
+def sicherungen_auflisten():
+    try:
+        return sorted((f for f in os.listdir(BACKUP_DIR) if f.startswith("kasse-") and f.endswith(".db")), reverse=True)
+    except OSError:
+        return []
 
 
 def get_bestellung(id):

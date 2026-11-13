@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../api.js'
 import { state } from '../store.js'
 import { euroInput, parseEuro } from '../format.js'
@@ -128,6 +128,20 @@ async function kLoeschen(k) {
   try { await api.deleteKarte(k.id) } catch (e) { showError(e) }
 }
 
+// ---------- Sicherungen ----------
+const sicherung = ref(null)
+async function sicherungenLaden() {
+  try { sicherung.value = await api.sicherungen() } catch (e) { showError(e) }
+}
+async function jetztSichern() {
+  try {
+    const r = await api.sicherungJetzt()
+    toast(`Gesichert: ${r.datei}`, 'ok')
+    sicherungenLaden()
+  } catch (e) { showError(e) }
+}
+onMounted(sicherungenLaden)
+
 // ---------- Allgemein ----------
 const titelEntwurf = ref(null)
 async function titelSpeichern() {
@@ -142,7 +156,7 @@ async function titelSpeichern() {
 async function reset() {
   const ok = await confirmDialog({
     title: 'Alle Daten löschen?',
-    text: 'Löscht alle Bestellungen, Produkte und Karten. Vorher wird automatisch eine Sicherung (data.db.reset-….bak) im Server-Ordner angelegt.',
+    text: 'Löscht alle Bestellungen, Produkte und Karten. Einstellungen (Name, Drucker, Logo, Sprüche) bleiben. Vorher wird automatisch eine Sicherung angelegt.',
     confirmText: 'Alles löschen',
     danger: true,
     requireText: 'RESET'
@@ -252,8 +266,20 @@ async function reset() {
     <DruckerEinstellungen />
 
     <section class="card">
-      <h2 style="margin-bottom: 12px">Daten</h2>
+      <h2 style="margin-bottom: 12px">Daten &amp; Sicherungen</h2>
+      <p class="text-2" style="margin-bottom: 10px">
+        Der Server sichert automatisch alle 5 Minuten (wenn sich etwas geändert hat), beim Start und beim Beenden.
+        <template v-if="sicherung">
+          <br>Letzte Sicherung:
+          <strong v-if="sicherung.letzte.zeit">{{ new Date(sicherung.letzte.zeit).toLocaleString('de-DE') }}</strong>
+          <span v-else>–</span>
+          <span v-if="sicherung.letzte.fehler" class="badge badge-danger">Fehler: {{ sicherung.letzte.fehler }}</span>
+          · {{ sicherung.dateien.length }} Sicherungen in <code>{{ sicherung.ordner }}</code>
+        </template>
+      </p>
       <div class="row">
+        <button class="btn btn-sm" @click="jetztSichern">Jetzt sichern</button>
+        <a class="btn btn-sm" href="/api/sicherungen/download"><Icon name="download" :size="16" /> Datenbank herunterladen</a>
         <a class="btn btn-sm" href="/api/export.csv" download><Icon name="download" :size="16" /> Bestellungen als CSV</a>
       </div>
       <p class="muted" style="font-size: .85rem; margin-top: 12px">

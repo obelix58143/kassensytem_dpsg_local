@@ -29,8 +29,8 @@ PRINTER_DEV_FILE = os.environ.get("PRINTER_DEV")
 _lock = threading.Lock()
 _printer = None
 _printer_key = None
-_sprueche = []
 _letzter_fehler = None
+_mischung = {"liste": None, "reihenfolge": []}
 
 
 def _standard_config():
@@ -41,23 +41,23 @@ def _standard_config():
 _get_config = _standard_config
 
 
-def configure(get_config):
-    """get_config() -> dict mit den aktuellen Einstellungen"""
-    global _get_config
+_get_logo = lambda: None  # noqa: E731
+
+
+def configure(get_config, get_logo=None):
+    """get_config() -> dict mit den Einstellungen, get_logo() -> PNG-Bytes oder None"""
+    global _get_config, _get_logo
     _get_config = get_config
+    if get_logo:
+        _get_logo = get_logo
 
 
-def _load_sprueche():
-    global _sprueche
-    try:
-        with open(os.path.join(FILES_DIR, "sprueche.json"), encoding="utf-8") as f:
-            _sprueche = [s for s in json.load(f) if isinstance(s, str) and s.strip()]
-    except (OSError, ValueError):
-        _sprueche = []
-    random.shuffle(_sprueche)
-
-
-_load_sprueche()
+def _spruch(liste, bid):
+    """Sprüche in zufälliger Reihenfolge, ohne Wiederholung bis alle einmal dran waren."""
+    if _mischung["liste"] != liste:
+        _mischung["liste"] = list(liste)
+        _mischung["reihenfolge"] = random.sample(range(len(liste)), len(liste))
+    return liste[_mischung["reihenfolge"][bid % len(liste)]]
 
 
 def _ziel(cfg):
@@ -161,8 +161,10 @@ def print_number(num):
 
 def _bon(p, cfg, bestellung):
     bid = bestellung["id"]
-    if cfg["bon_logo"] and os.path.exists(LOGO):
-        p.image(LOGO, center=True)
+    if cfg["bon_logo"]:
+        logo = _logo_bild(cfg)
+        if logo is not None:
+            p.image(logo, center=True)
     p.set(align="center", normal_textsize=True)
     if cfg["bon_kopf"]:
         p.text(f"\n{cfg['bon_kopf']}\n\n")
@@ -175,10 +177,8 @@ def _bon(p, cfg, bestellung):
         p.text("\n")
         for pos in bestellung["produkte"]:
             p.text(f"{pos['anzahl']}x {pos['name']}\n")
-    if cfg["bon_sprueche"] and _sprueche:
-        p.text(f"\n{_sprueche[bid % len(_sprueche)]}\n")
-        if bid % len(_sprueche) == 0:
-            random.shuffle(_sprueche)
+    if cfg["bon_sprueche"] and cfg["bon_sprueche_liste"]:
+        p.text(f"\n{_spruch(cfg['bon_sprueche_liste'], bid)}\n")
     n = cfg["bon_gewinn_alle"]
     if n and bid and bid % n == 0:
         p.text("\n")
@@ -188,6 +188,23 @@ def _bon(p, cfg, bestellung):
     if cfg["bon_fuss"]:
         p.text(f"\n{cfg['bon_fuss']}\n")
     p.text("\n\n\n")
+
+
+def _logo_bild(cfg):
+    """Logo aus der Datenbank (hochgeladen) oder printer_files/logo.png, passend zur Papierbreite"""
+    import io
+    from PIL import Image
+    roh = _get_logo()
+    if roh:
+        img = Image.open(io.BytesIO(roh))
+    elif os.path.exists(LOGO):
+        img = Image.open(LOGO)
+    else:
+        return None
+    max_px = 576 if cfg["bon_breite_mm"] == 80 else 384
+    if img.width > max_px:
+        img = img.resize((max_px, max(1, round(img.height * max_px / img.width))), Image.LANCZOS)
+    return img
 
 
 def print_receipt(bestellung):
@@ -202,8 +219,7 @@ def print_test():
 
 if __name__ == "__main__":
     # Testdruck der Sprüche: python printer.py [index ...]
-    with open(os.path.join(FILES_DIR, "sprueche.json"), encoding="utf-8") as f:
-        sprueche = json.load(f)
+    sprueche = _get_config()["bon_sprueche_liste"]
     numbers = [int(n) for n in sys.argv[1:]] or list(range(len(sprueche)))
 
     def job(p, cfg):
