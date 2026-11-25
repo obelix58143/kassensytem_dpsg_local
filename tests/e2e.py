@@ -413,6 +413,25 @@ def lauf(args, server):
         ausgabe.locator("dialog button", has_text="Stornieren").click()
         check("Storno über Dialog", bis(lambda: anzahl_bestellungen() == n0 - 1))
 
+        print("Mauszeiger: bei Touch aus, bei Maus an")
+        tctx = br.new_context(viewport={"width": 1280, "height": 800}, has_touch=True)
+        if args.sim_alt:
+            tctx.add_init_script(SIM_INIT)
+        tp = tctx.new_page()
+        tp.goto(B + "/#/kasse")
+        tp.wait_for_selector(".tile")
+        zeiger_aus = lambda: tp.evaluate("document.documentElement.classList.contains('zeiger-aus')")  # noqa: E731
+        cursor = lambda: tp.evaluate("getComputedStyle(document.querySelector('.tile')).cursor")  # noqa: E731
+        tp.mouse.move(300, 300)
+        tp.mouse.move(320, 310)
+        check("Maus bewegt -> Zeiger sichtbar", bis(lambda: not zeiger_aus()), cursor())
+        tp.locator(".tile").first.tap()
+        check("Touch -> Zeiger ausgeblendet", bis(zeiger_aus) and cursor() == "none", cursor())
+        tp.mouse.move(400, 400)
+        check("Trackpad danach -> Zeiger wieder da", bis(lambda: not zeiger_aus()) and cursor() != "none", cursor())
+        tp.keyboard.press("Escape")
+        tctx.close()
+
         print("Alle Seiten: Darstellung, XSS, Fehler")
         for pfad in ["/", "/kasse", "/ausgabe", "/front", "/statistik", "/settings"]:
             pg = seite(pfad)

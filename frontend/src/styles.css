@@ -257,3 +257,6 @@ textarea { resize: vertical; min-height: 64px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* Bei Touch-Bedienung kein Mauszeiger (siehe mauszeiger.js) */
+html.zeiger-aus, html.zeiger-aus * { cursor: none !important; }

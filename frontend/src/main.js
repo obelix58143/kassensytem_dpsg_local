@@ -6,6 +6,7 @@ import App from './App.vue'
 import router from './router.js'
 import { connect } from './store.js'
 import { applyTheme } from './ui.js'
+import { mauszeigerAutomatik } from './mauszeiger.js'
 
 // Flex-`gap` gibt es erst ab Chrome 84 und lässt sich nicht per @supports prüfen
 ;(function detectFlexGap() {
@@ -19,5 +20,6 @@ import { applyTheme } from './ui.js'
 })()
 
 applyTheme()
+mauszeigerAutomatik()
 connect()
 createApp(App).use(router).mount('#app')
