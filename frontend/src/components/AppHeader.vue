@@ -1,7 +1,8 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import api from '../api.js'
 import { state, offeneBestellungen, serverNow } from '../store.js'
-import { getTheme, setTheme } from '../ui.js'
+import { getTheme, setTheme, toast } from '../ui.js'
 
 const links = [
   { to: '/', label: 'Start' },
@@ -15,6 +16,35 @@ const links = [
 const uhr = computed(() =>
   new Date(serverNow()).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
 )
+
+// Akku des Kassen-Rechners: alle 30 s abfragen, nur anzeigen, wenn es einen gibt
+const akku = ref(null)
+const akkuStufe = computed(() => {
+  const a = akku.value
+  if (!a || a.netzteil) return 'ok'
+  return a.prozent <= 15 ? 'krit' : a.prozent <= 30 ? 'warn' : 'ok'
+})
+const akkuTitel = computed(() => {
+  const a = akku.value
+  if (!a) return ''
+  return `Akku der Kasse: ${a.prozent} % – ` + (a.laedt ? 'wird geladen' : a.netzteil ? 'am Netzteil' : 'läuft auf Akku')
+})
+let akkuTimer = null
+async function akkuLaden() {
+  if (document.hidden) return
+  let neu
+  try { neu = (await api.system()).akku } catch (e) { return }
+  const alt = akku.value
+  // nur bei Änderungen melden, nicht beim ersten Laden
+  if (alt && neu) {
+    if (alt.netzteil && !neu.netzteil) toast(`Kasse läuft auf Akku (${neu.prozent} %) – Strom prüfen!`, 'warn', { timeout: 10000 })
+    else if (!neu.netzteil && alt.prozent > 15 && neu.prozent <= 15) toast(`Akku der Kasse fast leer (${neu.prozent} %) – Netzteil anstecken!`, 'error', { timeout: 15000 })
+    else if (!alt.netzteil && neu.netzteil) toast('Kasse hängt wieder am Strom', 'ok')
+  }
+  akku.value = neu
+}
+onMounted(() => { akkuLaden(); akkuTimer = setInterval(akkuLaden, 30000) })
+onBeforeUnmount(() => clearInterval(akkuTimer))
 
 const theme = ref(getTheme())
 const themes = { auto: 'Auto', light: 'Hell', dark: 'Dunkel' }
@@ -41,6 +71,14 @@ function nextTheme() {
       <button class="btn btn-ghost btn-sm" :title="'Darstellung: ' + themes[theme]" @click="nextTheme">
         {{ theme === 'dark' ? '☾' : theme === 'light' ? '☀' : '◐' }} <span class="hide-sm">{{ themes[theme] }}</span>
       </button>
+      <span v-if="akku" class="status akku" :class="'akku-' + akkuStufe" :title="akkuTitel" :aria-label="akkuTitel">
+        <svg class="akku-icon" viewBox="0 0 26 14" aria-hidden="true">
+          <rect x="1" y="1" width="21" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <rect x="23" y="4.5" width="2" height="5" rx="1" fill="currentColor"/>
+          <rect x="3" y="3" :width="Math.max(1, 17 * akku.prozent / 100)" height="8" rx="1.2" fill="currentColor"/>
+        </svg>
+        <span v-if="akku.netzteil" aria-hidden="true">⚡</span>{{ akku.prozent }} %
+      </span>
       <span class="status" :class="state.connected ? 'is-on' : 'is-off'" :title="state.connected ? 'Live verbunden' : 'Getrennt'">
         <span class="dot" aria-hidden="true"></span>
         {{ state.connected ? 'Live' : 'Offline' }}
@@ -81,6 +119,11 @@ function nextTheme() {
 .is-on .dot { animation: pulse 2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 .clock { font-weight: 700; color: var(--text-2); }
+.akku { gap: 5px; white-space: nowrap; }
+.akku-icon { width: 24px; height: 13px; }
+.akku-ok { color: var(--text-2); background: var(--surface-2); }
+.akku-warn { color: var(--warn); background: var(--warn-soft); }
+.akku-krit { color: var(--danger); background: var(--danger-soft); animation: pulse 1.2s ease-in-out infinite; }
 @media (max-width: 720px) {
   .hide-sm, .clock { display: none; }
   .brand span:last-child { display: none; }

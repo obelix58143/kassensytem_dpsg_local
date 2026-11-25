@@ -24,6 +24,8 @@ Kasse, Ausgabe und Kundendisplay sind beliebige Geräte mit Browser im selben WL
 - **Robust** – automatische Wiederverbindung bei WLAN-Aussetzern, keine doppelten Bestellungen
   bei Timeouts, Preise werden serverseitig berechnet, jede bestätigte Buchung überlebt auch einen
   harten Absturz, automatische Sicherungen alle 5 Minuten
+- **Akku-Anzeige** – läuft die Kasse auf einem Laptop, zeigen alle Geräte oben dessen Akkustand;
+  Warnung, wenn der Strom weg ist oder der Akku zur Neige geht
 - **Läuft auf alten Tablets** – getestet bis zu einem Android-7-Browser (Chrome/WebView ab Version 53)
 
 | Ausgabe (mit „Abholbereit") | Kundendisplay | Statistik |
@@ -173,6 +175,7 @@ Lokal:
 | POST/PUT/DELETE | `/api/produkte[/<id>]` | `{name, beschreibung, preis_cent, pfand_cent, aktiv, sortierung, typ: "normal"\|"pfand"}` |
 | POST/PUT/DELETE | `/api/karten[/<id>]` | `{beschreibung}` |
 | GET / PUT | `/api/einstellungen` (über `/api/state`) | z.B. `{titel, bereit_aktiv, drucker_aktiv, bon_kopf, …}` |
+| GET | `/api/system` | Akkustand des Kassen-Rechners (`null` ohne Akku) |
 | GET · POST | `/api/drucker` · `/api/drucker/test` | Status · Testdruck |
 | PUT · GET · DELETE | `/api/drucker/logo` (GET: `/api/drucker/logo.png`) | Bilddatei als Body |
 | GET · POST | `/api/sicherungen` · `/api/sicherungen/download` | Liste/jetzt sichern · DB-Datei |

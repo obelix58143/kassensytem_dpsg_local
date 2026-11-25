@@ -60,6 +60,7 @@ export default {
   bonNachdrucken: (id) => call('POST', `/bestellungen/${id}/bon`),
   nummerDrucken: (id) => call('POST', `/bestellungen/${id}/nummer`),
   letzteNummerDrucken: () => call('POST', '/drucker/letzte-nummer'),
+  system: () => call('GET', '/system'),
   druckerStatus: () => call('GET', '/drucker'),
   druckerTest: () => call('POST', '/drucker/test'),
   logoLoeschen: () => call('DELETE', '/drucker/logo'),

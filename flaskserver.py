@@ -15,6 +15,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_sock import Sock
 from simple_websocket import ConnectionClosed
 
+import akku
 import database
 import printer
 
@@ -111,6 +112,12 @@ def _changed(payload=None, status=200):
 @app.get("/api/state")
 def api_state():
     return jsonify(database.get_state())
+
+
+@app.get("/api/system")
+def api_system():
+    # Akku des Kassen-Rechners (None, wenn keiner da ist)
+    return jsonify({"akku": akku.status()})
 
 
 @app.get("/api/drucker")
