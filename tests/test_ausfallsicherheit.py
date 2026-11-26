@@ -214,3 +214,87 @@ def test_reset_behaelt_logo_und_einstellungen(api, client):
     st = api.state()
     assert st["produkte"] == [] and st["einstellungen"]["titel"] == "Sommerfest"
     assert st["einstellungen"]["bon_logo_vorhanden"] is True
+
+
+# ---------- Start nach Stromausfall: kaputte Datenbank wird automatisch ersetzt ----------
+
+@pytest.fixture
+def mit_sicherung(api, tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "backups"))
+    pid = api.post("/api/produkte", {"name": "Wurst", "preis_cent": 300})[1]["id"]
+    assert api.bestellen([(pid, 2)])[0] == 201
+    assert database.sicherung_erstellen("auto")
+    return database.DB_PATH
+
+
+def _anzahl_bestellungen(pfad):
+    con = sqlite3.connect(pfad)
+    try:
+        return con.execute("SELECT COUNT(*) FROM BESTELLUNGEN").fetchone()[0]
+    finally:
+        con.close()
+
+
+def test_startpruefung_intakte_db_bleibt(mit_sicherung):
+    vorher = os.path.getmtime(mit_sicherung)
+    assert database.startpruefung() is None
+    assert os.path.getmtime(mit_sicherung) == vorher
+
+
+def test_startpruefung_ohne_db_nichts_zu_tun(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DB_PATH", str(tmp_path / "neu.db"))
+    assert database.startpruefung() is None
+    assert not os.path.exists(tmp_path / "neu.db")
+
+
+@pytest.mark.parametrize("schaden", ["muell", "leer", "abgeschnitten"])
+def test_startpruefung_kaputte_db_wird_aus_sicherung_ersetzt(mit_sicherung, schaden):
+    pfad = mit_sicherung
+    inhalt = open(pfad, "rb").read()
+    with open(pfad, "wb") as f:
+        if schaden == "muell":
+            f.write(b"\x00kaputt" * 5000)
+        elif schaden == "abgeschnitten":
+            f.write(inhalt[: len(inhalt) // 2])
+    meldung = database.startpruefung()
+    assert meldung and "eingespielt" in meldung
+    assert _anzahl_bestellungen(pfad) == 1
+    assert any(".kaputt-" in f for f in os.listdir(os.path.dirname(pfad)))  # Beweisstück bleibt
+    database.setup_db()  # danach startet der Server ganz normal
+    assert database.startpruefung() is None
+
+
+def test_startpruefung_ueberspringt_kaputte_sicherung(mit_sicherung):
+    neueste = os.path.join(database.BACKUP_DIR, "kasse-99991231-235959-auto.db")
+    with open(neueste, "wb") as f:
+        f.write(b"kaputt")
+    with open(mit_sicherung, "wb") as f:
+        f.write(b"kaputt")
+    assert "eingespielt" in database.startpruefung()
+    assert _anzahl_bestellungen(mit_sicherung) == 1
+
+
+def test_startpruefung_ohne_sicherung_neue_db(db, tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "gibtsnicht"))
+    with open(db, "wb") as f:
+        f.write(b"kaputt" * 100)
+    assert "keine Sicherung" in database.startpruefung()
+    database.setup_db()
+    assert _anzahl_bestellungen(db) == 0
+
+
+def test_server_startet_trotz_kaputter_db(tmp_path):
+    srv = Server(tmp_path)
+    srv.start()
+    pid = http(srv.base, "POST", "/api/produkte", {"name": "Brot", "preis_cent": 100})[1]["id"]
+    assert http(srv.base, "POST", "/api/bestellungen", {"produkte": [{"id": pid, "anzahl": 1}]})[0] == 201
+    srv.kill(signal.SIGTERM)  # schreibt Sicherung "ende"
+    with open(tmp_path / "data.db", "r+b") as f:
+        f.seek(0)
+        f.write(b"\xff" * 4096)
+    srv.start()
+    try:
+        assert http(srv.base, "GET", "/api/state")[0] == 200
+        assert _anzahl_bestellungen(str(tmp_path / "data.db")) == 1
+    finally:
+        srv.kill()

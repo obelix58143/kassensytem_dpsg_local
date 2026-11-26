@@ -108,6 +108,8 @@ sudo systemctl enable --now kasse
 - **Automatische Sicherungen** nach `backups/`: beim Start, alle 5 Minuten (nur wenn sich etwas
   geändert hat) und beim Beenden; die letzten 72 werden behalten. Jede Sicherung wird vor dem
   Speichern auf Fehlerfreiheit geprüft. Tipp: `KASSE_BACKUP_DIR` auf einen USB-Stick zeigen lassen.
+- **Selbstheilung beim Start:** Ist die Datenbank nach einem Stromausfall beschädigt, wird sie
+  beiseitegelegt (`data.db.kaputt-…`) und automatisch die neueste fehlerfreie Sicherung eingespielt.
 - **Einstellungen → Daten & Sicherungen:** „Jetzt sichern", Datenbank herunterladen (z.B. aufs Handy),
   CSV-Export aller Bestellungen.
 - **Wiederherstellen:** Server stoppen, gewünschte Datei aus `backups/` als `data.db` in den

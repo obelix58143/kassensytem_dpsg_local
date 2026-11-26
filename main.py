@@ -27,6 +27,7 @@ def beenden(signum, _frame):
 
 
 if __name__ == "__main__":
+    database.startpruefung()  # nach Stromausfall: kaputte DB -> letzte Sicherung
     database.setup_db()
     print(f"[db] Datenbank: {database.DB_PATH}")
     print(f"[backup] Sicherungen alle {BACKUP_MINUTEN:g} min nach: {database.BACKUP_DIR}")

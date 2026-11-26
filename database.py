@@ -585,9 +585,60 @@ def sicherung_erstellen(grund="auto"):
             return None
 
 
+def _db_ok(pfad):
+    """True, wenn die Datei eine intakte Kassen-Datenbank ist."""
+    con = sqlite3.connect(f"file:{pfad}?mode=ro", uri=True, timeout=10)
+    try:
+        if con.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            return False
+        return "BESTELLUNGEN" in _tables(con)
+    finally:
+        con.close()
+
+
+def startpruefung():
+    """Beim Start: Ist die Datenbank nach einem Absturz/Stromausfall kaputt (oder leer
+    überschrieben), wird sie beiseitegelegt und die neueste intakte Sicherung eingespielt.
+    Gibt eine Meldung zurück, wenn etwas wiederhergestellt wurde, sonst None."""
+    if not os.path.exists(DB_PATH):
+        return None  # Erstinstallation
+    try:
+        if _db_ok(DB_PATH):
+            return None
+        grund = "Prüfung fehlgeschlagen"
+    except sqlite3.DatabaseError as e:
+        if "locked" in str(e) or "unable to open" in str(e):
+            raise  # kein Defekt der Datei – nichts anfassen
+        grund = str(e)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    for endung in ("", "-wal", "-shm"):
+        if os.path.exists(DB_PATH + endung):
+            os.replace(DB_PATH + endung, f"{DB_PATH}.kaputt-{stamp}{endung}")
+    for name in sicherungen_auflisten():
+        quelle = os.path.join(BACKUP_DIR, name)
+        try:
+            if not _db_ok(quelle):
+                continue
+        except sqlite3.DatabaseError:
+            continue
+        tmp = DB_PATH + ".tmp"
+        shutil.copyfile(quelle, tmp)
+        with open(tmp, "rb") as f:
+            os.fsync(f.fileno())
+        os.replace(tmp, DB_PATH)
+        meldung = f"Datenbank war beschädigt ({grund}) – Sicherung {name} eingespielt"
+        print(f"[db] WARNUNG: {meldung}")
+        return meldung
+    meldung = f"Datenbank war beschädigt ({grund}) – keine Sicherung vorhanden, neue leere Datenbank"
+    print(f"[db] WARNUNG: {meldung}")
+    return meldung
+
+
 def sicherungen_auflisten():
     try:
-        return sorted((f for f in os.listdir(BACKUP_DIR) if f.startswith("kasse-") and f.endswith(".db")), reverse=True)
+        namen = [f for f in os.listdir(BACKUP_DIR) if f.startswith("kasse-") and f.endswith(".db")]
+        # neueste zuerst – nach Änderungszeit, weil "start" und "ende" in derselben Sekunde liegen können
+        return sorted(namen, key=lambda f: (os.path.getmtime(os.path.join(BACKUP_DIR, f)), f), reverse=True)
     except OSError:
         return []
 
