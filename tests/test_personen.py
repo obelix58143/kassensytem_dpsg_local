@@ -104,3 +104,12 @@ def test_system_liefert_adressen(api):
     assert isinstance(d["adressen"], list) and all(isinstance(x, str) for x in d["adressen"])
     assert "127.0.0.1" not in d["adressen"]
     assert "akku" in d and "hostname" in d
+
+
+def test_namen_schalter(api):
+    e = api.state()["einstellungen"]
+    assert e["name_kasse"] is True and e["name_ausgabe"] is True
+    assert api.put("/api/einstellungen", {"name_kasse": False, "name_ausgabe": False})[0] == 200
+    e = api.state()["einstellungen"]
+    assert e["name_kasse"] is False and e["name_ausgabe"] is False
+    assert api.put("/api/einstellungen", {"name_kasse": "nein"})[0] == 400

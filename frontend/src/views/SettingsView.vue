@@ -100,6 +100,14 @@ async function pNeu(typ = 'normal') {
 }
 
 // ---------- Ablauf ----------
+async function setNamen(schluessel, an) {
+  try {
+    await api.setEinstellungen({ [schluessel]: an })
+    const wo = schluessel === 'name_kasse' ? 'Kasse' : 'Ausgabe'
+    toast(an ? `${wo} fragt nach dem Namen` : `${wo} ohne Namen`, 'ok')
+  } catch (e) { showError(e) }
+}
+
 async function setBereit(aktiv) {
   try {
     await api.setEinstellungen({ bereit_aktiv: aktiv })
@@ -194,6 +202,19 @@ async function reset() {
       <p class="muted" style="font-size: .9rem; margin-top: 8px">
         Aus: <strong>bestellt → abgeholt</strong>. An: <strong>bestellt → abholbereit → abgeholt</strong> –
         die Ausgabe tippt „Fertig", das Kundendisplay zeigt die Nummer groß unter „Bitte abholen".
+      </p>
+      <div class="row" style="gap: 10px 28px; margin-top: 14px">
+        <label class="switch">
+          <input type="checkbox" :checked="state.einstellungen.name_kasse !== false" @change="setNamen('name_kasse', $event.target.checked)">
+          Namen an der Kasse eintragen
+        </label>
+        <label class="switch">
+          <input type="checkbox" :checked="state.einstellungen.name_ausgabe !== false" @change="setNamen('name_ausgabe', $event.target.checked)">
+          Namen an der Ausgabe eintragen
+        </label>
+      </div>
+      <p class="muted" style="font-size: .9rem; margin-top: 8px">
+        Für das Ranking in der Statistik (meiste Einnahmen / schnellste Bearbeitung). Steht nicht auf dem Bon.
       </p>
     </section>
 

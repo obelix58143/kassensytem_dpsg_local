@@ -422,6 +422,8 @@ def _standard_sprueche():
 EINSTELLUNGEN_STANDARD = {
     "titel": "Kasse",                 # Name in Kopfzeile, Kundendisplay, Browser-Tab
     "bereit_aktiv": False,            # Zwischenschritt "Bereit zur Abholung" verwenden
+    "name_kasse": True,               # Kasse fragt nach dem Namen (Ranking in der Statistik)
+    "name_ausgabe": True,             # Ausgabe fragt nach dem Namen (Ranking in der Statistik)
     # --- Bondrucker (ESC/POS) ---
     "drucker_aktiv": True,            # aus = es wird nie gedruckt
     "drucker_verbindung": "usb",      # "usb" (Gerätedatei) oder "netzwerk" (RAW, Port 9100)

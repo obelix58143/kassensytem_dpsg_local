@@ -40,7 +40,7 @@ async function run(id, fn) {
 function setStatus(b, status, text, undoStatus) {
   run(b.id, async () => {
     // Wer fertig meldet, zählt fürs Ranking „schnellste Bearbeitung"
-    await api.setStatus(b.id, status, ausgabePerson.value || null)
+    await api.setStatus(b.id, status, (state.einstellungen.name_ausgabe !== false && ausgabePerson.value) || null)
     toast(`#${b.id} ${text}`, 'ok', { action: { label: 'Rückgängig', run: () => run(b.id, () => api.setStatus(b.id, undoStatus)) } })
   })
 }
@@ -77,7 +77,7 @@ function bon(b) {
       </div>
     </div>
 
-    <PersonWahl v-model="ausgabePerson" label="Ausgabe:" :vorschlaege="letzteAusgabe" class="ausgabe-person" />
+    <PersonWahl v-if="state.einstellungen.name_ausgabe !== false" v-model="ausgabePerson" label="Ausgabe:" :vorschlaege="letzteAusgabe" class="ausgabe-person" />
 
     <div class="ausgabe">
       <div>

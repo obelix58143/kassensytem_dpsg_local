@@ -20,7 +20,7 @@ Kasse, Ausgabe und Kundendisplay sind beliebige Geräte mit Browser im selben WL
 - **Kundendisplay** – Vollbild-Ansicht mit Nummern und Angebot (Doppelklick = Vollbild);
   einzelne Produkte lassen sich dort ausblenden und bleiben an der Kasse verkaufbar
 - **Statistik** – Umsatz, Produkte, Wartezeiten, Pfand – live, als interaktive Charts; CSV-Export
-- **Ranking** – an Kasse und Ausgabe trägt man sich mit Namen ein (pro Gerät gemerkt);
+- **Ranking** – an Kasse und Ausgabe trägt man sich mit Namen ein (pro Gerät gemerkt, abschaltbar);
   die Statistik zeigt, wer am meisten eingenommen und wer am schnellsten fertig gemeldet hat
 - **Adresse auf der Startseite** – die IP des Kassen-Rechners zum Abtippen auf den Tablets
 - **Bondrucker** (ESC/POS) – USB oder Netzwerk, 58/80 mm, Kopf-/Fußzeile, Logo, Sprüche,

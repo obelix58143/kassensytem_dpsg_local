@@ -95,7 +95,7 @@ async function aufgeben() {
       client_ref: clientRef,
       karte: nurPfand.value ? null : karte.value,
       eigenbedarf: eigenbedarf.value,
-      kassierer: kassierer.value || null,
+      kassierer: (state.einstellungen.name_kasse !== false && kassierer.value) || null,
       produkte: positionen.value.map(p => ({ id: p.produkt.id, anzahl: p.anzahl }))
     })
     const serverGesamt = res.preis_cent + res.pfand_cent
@@ -170,7 +170,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </section>
 
     <aside ref="korbEl" class="korb card" aria-label="Aktuelle Bestellung">
-      <PersonWahl v-model="kassierer" label="Kasse:" :vorschlaege="letzteKassierer" class="korb-person" />
+      <PersonWahl v-if="state.einstellungen.name_kasse !== false" v-model="kassierer" label="Kasse:" :vorschlaege="letzteKassierer" class="korb-person" />
       <div class="card-head">
         <h2>Bestellung <span v-if="anzahlGesamt" class="badge">{{ anzahlGesamt }} Artikel</span></h2>
         <button class="btn btn-ghost btn-sm" :disabled="!korb.size && !gegeben.length" @click="leeren">Leeren</button>

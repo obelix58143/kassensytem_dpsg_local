@@ -11,7 +11,7 @@ export const state = reactive({
   produkte: [],
   karten: [],
   bestellungen: [],
-  einstellungen: { titel: 'Kasse', bereit_aktiv: false, drucker_aktiv: true },
+  einstellungen: { titel: 'Kasse', bereit_aktiv: false, drucker_aktiv: true, name_kasse: true, name_ausgabe: true },
   loaded: false,
   connected: false,
   clockOffset: 0, // Serverzeit - Gerätezeit (Tablets haben oft falsche Uhren)

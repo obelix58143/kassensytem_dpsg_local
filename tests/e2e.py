@@ -450,6 +450,18 @@ def lauf(args, server):
         check("…Flammkuchen bleibt auf dem Display", "Flammkuchen" in front.locator(".front-menu").inner_text())
         pitem(settings, "Glühwein").locator("label.switch", has_text="Display").click()
         check("Wieder eingeblendet", bis(lambda: "Glühwein" in front.locator(".front-menu").inner_text()))
+        settings.locator("label.switch", has_text="Namen an der Kasse").click()
+        settings.locator("label.switch", has_text="Namen an der Ausgabe").click()
+        check("Schalter aus: kein Namensfeld an Kasse und Ausgabe",
+              bis(lambda: kasse.locator(".korb .person").count() == 0 and ausgabe.locator(".ausgabe-person").count() == 0))
+        tile(kasse, "Flammkuchen").click()
+        kasse.locator("button", has_text="Bestellung aufgeben").click()
+        check("…Bestellung dann ohne Kassierer:in", bis(lambda: state()["bestellungen"][0]["kassierer"] is None
+                                                       and state()["bestellungen"][0]["id"] > int(nr_anna)))
+        settings.locator("label.switch", has_text="Namen an der Kasse").click()
+        settings.locator("label.switch", has_text="Namen an der Ausgabe").click()
+        check("Schalter an: Namensfelder wieder da (Name gemerkt)",
+              bis(lambda: kasse.locator(".korb .person-name").count() == 1 and ausgabe.locator(".ausgabe-person").count() == 1))
         home = seite("/")
         check("Startseite zeigt Adresse für die Tablets",
               bis(lambda: home.locator(".adresse").count() == 1 and "http://" in home.locator(".adresse").inner_text()),
