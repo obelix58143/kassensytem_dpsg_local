@@ -17,6 +17,8 @@ const sending = ref(false)
 let clientRef = newClientRef()
 const letzte = ref(null) // Info zur zuletzt aufgegebenen Bestellung (für Rückgeld)
 const korbEl = ref(null)
+const nameBearbeiten = ref(false)
+const namenAn = computed(() => state.einstellungen.name_kasse !== false)
 const zumKorb = () => korbEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
 const scheine = [5000, 2000, 1000, 500]
@@ -170,9 +172,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </section>
 
     <aside ref="korbEl" class="korb card" aria-label="Aktuelle Bestellung">
-      <PersonWahl v-if="state.einstellungen.name_kasse !== false" v-model="kassierer" label="Kasse:" :vorschlaege="letzteKassierer" class="korb-person" />
+      <!-- Name nur zum Eintragen groß, danach klein im Kopf – der Kasten muss auf kleine Bildschirme passen -->
+      <PersonWahl v-if="namenAn && (!kassierer || nameBearbeiten)" v-model="kassierer" label="Kasse:"
+                  :vorschlaege="letzteKassierer" :start-offen="nameBearbeiten" class="korb-person" @fertig="nameBearbeiten = false" />
       <div class="card-head">
         <h2>Bestellung <span v-if="anzahlGesamt" class="badge">{{ anzahlGesamt }} Artikel</span></h2>
+        <span class="spacer"></span>
+        <button v-if="namenAn && kassierer && !nameBearbeiten" class="btn btn-ghost btn-sm kasse-name" title="Name wechseln" @click="nameBearbeiten = true">
+          {{ kassierer }} ✎
+        </button>
         <button class="btn btn-ghost btn-sm" :disabled="!korb.size && !gegeben.length" @click="leeren">Leeren</button>
       </div>
 
@@ -232,14 +240,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </div>
 
       <div v-if="gesamt > 0" class="section">
-        <div class="label">Gegeben</div>
+        <div class="label row gegeben-kopf">
+          Gegeben
+          <span class="spacer"></span>
+          <button class="btn btn-sm btn-ghost" :disabled="!gegeben.length" aria-label="Letzten Betrag entfernen" @click="gegeben.pop()"><Icon name="undo" /></button>
+        </div>
         <div class="geld">
           <button class="btn btn-sm passend" @click="gegeben = [gesamt]">Passend</button>
           <button v-for="c in scheine" :key="c" class="btn btn-sm schein" @click="gegeben.push(c)">{{ c / 100 }} €</button>
-        </div>
-        <div class="geld">
           <button v-for="c in muenzen" :key="c" class="btn btn-sm muenze" @click="gegeben.push(c)">{{ c >= 100 ? c / 100 + ' €' : c + ' ct' }}</button>
-          <button class="btn btn-sm btn-ghost" :disabled="!gegeben.length" aria-label="Letzten Betrag entfernen" @click="gegeben.pop()"><Icon name="undo" /></button>
         </div>
         <div v-if="gegeben.length" class="rueckgeld" :class="rueckgeld < 0 ? 'fehlt' : 'ok'">
           <span>{{ rueckgeld < 0 ? 'Fehlt noch' : 'Rückgeld' }}</span>
@@ -303,15 +312,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   color: var(--text); font-size: 1.4rem; line-height: 1; cursor: pointer;
 }
 
-.korb { position: sticky; top: 72px; display: flex; flex-direction: column; max-height: calc(100vh - 92px); overflow-y: auto; }
+.korb { position: sticky; top: 72px; display: flex; flex-direction: column; max-height: calc(100vh - 120px); max-height: calc(var(--vh100, 100vh) - 120px); overflow-y: auto; }
+.korb .card-head { margin-bottom: 6px; }
+.korb .card-head h2 { white-space: nowrap; }
+/* Nur die Positionsliste scrollt – Summe, Geld und „Aufgeben" bleiben immer sichtbar */
+.korb > * { flex-shrink: 0; }
+.korb > .positionen { flex: 0 1 auto; min-height: 84px; overflow-y: auto; }
+/* falls es trotzdem nicht passt (viele Karten): der Knopf klebt unten im Kasten */
+.korb > .btn-primary.btn-lg { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 0 0 8px var(--surface); }
+.kasse-name { font-weight: 700; color: var(--text-2); max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gegeben-kopf { align-items: center; margin-bottom: 4px !important; }
+.gegeben-kopf .btn { min-height: 30px; height: 30px; }
 @media (max-width: 900px) { .korb { position: static; max-height: none; } }
-.korb .section { padding: 12px 0; border-top: 1px solid var(--border); }
+.korb .section { padding: 8px 0; border-top: 1px solid var(--border); }
 .korb .label { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
 .korb .hint { padding: 8px 0 14px; }
 .chips { gap: 8px; }
 
 .positionen { list-style: none; margin: 0 0 8px; padding: 0; }
-.positionen li { display: grid; grid-template-columns: minmax(0, 1fr) auto 76px; gap: 10px; align-items: center; padding: 6px 0; }
+.positionen li { display: grid; grid-template-columns: minmax(0, 1fr) auto 76px; gap: 10px; align-items: center; padding: 3px 0; }
 .pos-name { font-weight: 600; }
 .stepper { display: inline-flex; align-items: center; gap: 6px; }
 .stepper .btn { width: 36px; font-size: 1.1rem; }
@@ -321,7 +340,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .summen .sum-row { display: flex; justify-content: space-between; padding: 2px 0; color: var(--text-2); }
 .summen .total { color: var(--text); font-size: 1.6rem; font-weight: 800; margin-top: 4px; }
 
-.geld { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin-bottom: 6px; }
+.geld { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px; }
 .geld .btn { padding: 0 6px; }
 .schein { background: var(--surface-2); }
 .passend { grid-column: span 2; }

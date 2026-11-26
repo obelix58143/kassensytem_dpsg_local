@@ -298,3 +298,84 @@ def test_server_startet_trotz_kaputter_db(tmp_path):
         assert _anzahl_bestellungen(str(tmp_path / "data.db")) == 1
     finally:
         srv.kill()
+
+
+# ---------- Sicherung einspielen ----------
+
+def test_sicherung_einspielen(api, tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "backups"))
+    pid = api.produkt("Elsässer", preis=800)
+    api.bestellen([(pid, 1)])
+    name = os.path.basename(database.sicherung_erstellen("manuell"))
+    api.bestellen([(pid, 2)])
+    api.put(f"/api/produkte/{pid}", {"preis_cent": 999})
+    s, d = api.post("/api/sicherungen/einspielen", {"datei": name})
+    assert s == 200, d
+    st = api.state()
+    assert len(st["bestellungen"]) == 1 and st["produkte"][0]["preis_cent"] == 800
+    assert "vor-einspielen" in d["vorher"]
+    # ...und zurück: der Stand vor dem Einspielen ist selbst eine Sicherung
+    assert api.post("/api/sicherungen/einspielen", {"datei": d["vorher"]})[0] == 200
+    assert len(api.state()["bestellungen"]) == 2
+    assert api.bestellen([(pid, 1)])[0] == 201  # weiter normal buchbar
+
+
+@pytest.mark.parametrize("name", ["../data.db", "gibts-nicht.db", None, 5])
+def test_sicherung_einspielen_ungueltig(api, tmp_path, monkeypatch, name):
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "backups"))
+    assert api.post("/api/sicherungen/einspielen", {"datei": name})[0] == 404
+
+
+def test_sicherung_hochladen(api, client, tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "backups"))
+    pid = api.produkt("Kombi", preis=1000)
+    api.bestellen([(pid, 1)])
+    roh = open(database.sicherung_erstellen("download"), "rb").read()
+    api.bestellen([(pid, 1)])
+    r = client.put("/api/sicherungen/hochladen", data=roh, content_type="application/octet-stream")
+    assert r.status_code == 200, r.get_json()
+    assert len(api.state()["bestellungen"]) == 1
+    assert not [f for f in os.listdir(database.BACKUP_DIR) if f.endswith(".tmp")]
+
+
+@pytest.mark.parametrize("daten,text", [
+    (b"kein sqlite", "keine Kassen-Datenbank"),
+    (b"SQLite format 3\x00" + b"\x00" * 200, "keine Kassen-Datenbank"),
+])
+def test_sicherung_hochladen_falsche_datei(api, client, tmp_path, monkeypatch, daten, text):
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "backups"))
+    pid = api.produkt()
+    api.bestellen([(pid, 1)])
+    r = client.put("/api/sicherungen/hochladen", data=daten, content_type="application/octet-stream")
+    assert r.status_code == 400 and text in r.get_json()["error"]
+    assert len(api.state()["bestellungen"]) == 1
+
+
+def test_fremde_sqlite_datei_wird_abgelehnt(api, client, tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "backups"))
+    fremd = tmp_path / "fremd.db"
+    c = sqlite3.connect(fremd); c.execute("CREATE TABLE x(a)"); c.commit(); c.close()
+    r = client.put("/api/sicherungen/hochladen", data=fremd.read_bytes(), content_type="application/octet-stream")
+    assert r.status_code == 400
+
+
+def test_alte_version_wird_beim_einspielen_migriert(api, client, tmp_path, monkeypatch):
+    """Eine Sicherung vom Stand v3 (vor Kassierer/Display) lässt sich einspielen."""
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "backups"))
+    alt = tmp_path / "v3.db"
+    c = sqlite3.connect(alt)
+    c.executescript(database.SCHEMA_V2 + database._sql_v2_to_v3(aus_v1=False) + """
+        INSERT INTO PRODUKTE (name, preis_cent) VALUES ('Alt', 700);
+        PRAGMA user_version = 3;""")
+    c.close()
+    r = client.put("/api/sicherungen/hochladen", data=alt.read_bytes(), content_type="application/octet-stream")
+    assert r.status_code == 200, r.get_json()
+    p = api.state()["produkte"]
+    assert p[0]["name"] == "Alt" and p[0]["auf_display"] is True
+    assert api.bestellen([(p[0]["id"], 1)], kassierer="X")[0] == 201
+
+
+def test_sicherungen_in_derselben_sekunde_ueberschreiben_sich_nicht(db, tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "BACKUP_DIR", str(tmp_path / "backups"))
+    namen = {os.path.basename(database.sicherung_erstellen("manuell")) for _ in range(3)}
+    assert len(namen) == 3

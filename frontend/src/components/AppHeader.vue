@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import api from '../api.js'
 import { state, offeneBestellungen, serverNow } from '../store.js'
 import { getTheme, setTheme, toast } from '../ui.js'
+import { STUFEN, zoom, zoomSchritt, zoomSetzen } from '../zoom.js'
 
 const links = [
   { to: '/', label: 'Start' },
@@ -68,6 +69,11 @@ function nextTheme() {
       </router-link>
     </nav>
     <div class="header-right">
+      <span class="zoom" role="group" aria-label="Zoom">
+        <button class="btn btn-ghost btn-sm" title="Kleiner" aria-label="Kleiner" :disabled="zoom <= STUFEN[0]" @click="zoomSchritt(-1)">A−</button>
+        <button class="btn btn-ghost btn-sm zoom-wert hide-sm" title="Zoom auf 100 %" @click="zoomSetzen(1)">{{ Math.round(zoom * 100) }} %</button>
+        <button class="btn btn-ghost btn-sm" title="Größer" aria-label="Größer" :disabled="zoom >= STUFEN[STUFEN.length - 1]" @click="zoomSchritt(1)">A+</button>
+      </span>
       <button class="btn btn-ghost btn-sm" :title="'Darstellung: ' + themes[theme]" @click="nextTheme">
         {{ theme === 'dark' ? '☾' : theme === 'light' ? '☀' : '◐' }} <span class="hide-sm">{{ themes[theme] }}</span>
       </button>
@@ -112,6 +118,9 @@ function nextTheme() {
 .nav-link.router-link-exact-active { background: var(--primary-soft); color: var(--primary); }
 .nav-count { background: var(--primary); color: var(--on-primary); border-radius: 999px; font-size: .75rem; padding: 1px 7px; font-weight: 700; }
 .header-right { display: flex; align-items: center; gap: 10px; }
+.zoom { display: inline-flex; align-items: center; }
+.zoom .btn { padding: 0 8px; font-weight: 700; }
+.zoom-wert { min-width: 4.2em; font-variant-numeric: tabular-nums; color: var(--text-2); }
 .status { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
 .status.is-on { color: var(--ok); background: var(--ok-soft); }
 .status.is-off { color: var(--danger); background: var(--danger-soft); }

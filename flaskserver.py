@@ -238,7 +238,7 @@ def api_logo_loeschen():
 @app.get("/api/sicherungen")
 def api_sicherungen():
     return jsonify({"letzte": database.letzte_sicherung, "ordner": database.BACKUP_DIR,
-                    "dateien": database.sicherungen_auflisten()[:20]})
+                    "dateien": database.sicherungen_auflisten()[:100]})
 
 
 @app.post("/api/sicherungen")
@@ -247,6 +247,36 @@ def api_sicherung_jetzt():
     if not ziel:
         raise database.DBError(f"Sicherung fehlgeschlagen: {database.letzte_sicherung['fehler']}", 500)
     return jsonify({"ok": True, "datei": os.path.basename(ziel)})
+
+
+@app.post("/api/sicherungen/einspielen")
+def api_sicherung_einspielen():
+    """Eine der automatischen Sicherungen als aktuellen Stand einspielen"""
+    name = _body().get("datei")
+    if not isinstance(name, str) or name not in database.sicherungen_auflisten():
+        raise database.DBError("Sicherung nicht gefunden", 404)
+    vorher = database.sicherung_einspielen(os.path.join(database.BACKUP_DIR, name))
+    return _changed({"ok": True, "vorher": vorher})
+
+
+@app.put("/api/sicherungen/hochladen")
+def api_sicherung_hochladen():
+    """Eine Datenbank-Datei (z.B. vom Handy) hochladen und einspielen"""
+    request.max_content_length = 200 * 1024 * 1024
+    daten = request.get_data(cache=False)
+    if not daten.startswith(b"SQLite format 3\x00"):
+        raise database.DBError("Das ist keine Kassen-Datenbank (.db-Datei aus „Datenbank herunterladen\")")
+    os.makedirs(database.BACKUP_DIR, exist_ok=True)
+    tmp = os.path.join(database.BACKUP_DIR, f"hochgeladen-{os.getpid()}-{threading.get_ident()}.tmp")
+    try:
+        with open(tmp, "wb") as f:
+            f.write(daten)
+        vorher = database.sicherung_einspielen(tmp)
+    finally:
+        for endung in ("", "-wal", "-shm", "-journal"):
+            if os.path.exists(tmp + endung):
+                os.remove(tmp + endung)
+    return _changed({"ok": True, "vorher": vorher})
 
 
 @app.get("/api/sicherungen/download")

@@ -5,15 +5,16 @@ import { computed, ref } from 'vue'
 const props = defineProps({
   modelValue: { type: String, default: '' },
   label: { type: String, required: true },
-  vorschlaege: { type: Array, default: () => [] }
+  vorschlaege: { type: Array, default: () => [] },
+  startOffen: { type: Boolean, default: false }
 })
-const emit = defineEmits(['update:modelValue'])
-const offen = ref(!props.modelValue)
+const emit = defineEmits(['update:modelValue', 'fertig'])
+const offen = ref(props.startOffen || !props.modelValue)
 const andere = computed(() => props.vorschlaege.filter(n => n !== props.modelValue).slice(0, 5))
 
 function setzen(n) {
   emit('update:modelValue', (n || '').trim())
-  if ((n || '').trim()) offen.value = false
+  if ((n || '').trim()) { offen.value = false; emit('fertig') }
 }
 </script>
 
@@ -33,7 +34,7 @@ function setzen(n) {
       <div v-if="andere.length" class="row person-chips">
         <button v-for="n in andere" :key="n" class="chip" @click="setzen(n)">{{ n }}</button>
       </div>
-      <button v-if="modelValue" class="btn btn-sm" @click="offen = false">OK</button>
+      <button v-if="modelValue" class="btn btn-sm" @click="offen = false; $emit('fertig')">OK</button>
     </template>
   </div>
 </template>

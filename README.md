@@ -23,6 +23,7 @@ Kasse, Ausgabe und Kundendisplay sind beliebige Geräte mit Browser im selben WL
 - **Ranking** – an Kasse und Ausgabe trägt man sich mit Namen ein (pro Gerät gemerkt, abschaltbar);
   die Statistik zeigt, wer am meisten eingenommen und wer am schnellsten fertig gemeldet hat
 - **Adresse auf der Startseite** – die IP des Kassen-Rechners zum Abtippen auf den Tablets
+- **Zoom** – A−/A+ in der Kopfzeile, pro Gerät gemerkt (am Kassen-Rechner selbst auf dem Server)
 - **Bondrucker** (ESC/POS) – USB oder Netzwerk, 58/80 mm, Kopf-/Fußzeile, Logo, Sprüche,
   „jede N-te Bestellung gewinnt", alles in der Oberfläche einstellbar und abschaltbar
 - **Robust** – automatische Wiederverbindung bei WLAN-Aussetzern, keine doppelten Bestellungen
@@ -112,6 +113,9 @@ sudo systemctl enable --now kasse
 - **Automatische Sicherungen** nach `backups/`: beim Start, alle 5 Minuten (nur wenn sich etwas
   geändert hat) und beim Beenden; die letzten 72 werden behalten. Jede Sicherung wird vor dem
   Speichern auf Fehlerfreiheit geprüft. Tipp: `KASSE_BACKUP_DIR` auf einen USB-Stick zeigen lassen.
+- **Sicherung einspielen:** Einstellungen → Daten & Sicherungen – eine automatische Sicherung
+  zurückholen oder eine heruntergeladene `.db`-Datei (z.B. vom Handy) hochladen. Der Stand davor wird
+  vorher gesichert; ältere Programmversionen werden automatisch übernommen.
 - **Selbstheilung beim Start:** Ist die Datenbank nach einem Stromausfall beschädigt, wird sie
   beiseitegelegt (`data.db.kaputt-…`) und automatisch die neueste fehlerfreie Sicherung eingespielt.
 - **Einstellungen → Daten & Sicherungen:** „Jetzt sichern", Datenbank herunterladen (z.B. aufs Handy),
@@ -185,6 +189,7 @@ Lokal:
 | GET · POST | `/api/drucker` · `/api/drucker/test` | Status · Testdruck |
 | PUT · GET · DELETE | `/api/drucker/logo` (GET: `/api/drucker/logo.png`) | Bilddatei als Body |
 | GET · POST | `/api/sicherungen` · `/api/sicherungen/download` | Liste/jetzt sichern · DB-Datei |
+| POST · PUT | `/api/sicherungen/einspielen` · `/api/sicherungen/hochladen` | `{datei}` einer Sicherung · rohe `.db`-Datei |
 | GET | `/api/export.csv` | – |
 | POST | `/api/reset` | `{bestaetigung: "RESET"}` |
 

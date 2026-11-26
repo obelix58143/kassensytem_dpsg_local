@@ -424,6 +424,7 @@ EINSTELLUNGEN_STANDARD = {
     "bereit_aktiv": False,            # Zwischenschritt "Bereit zur Abholung" verwenden
     "name_kasse": True,               # Kasse fragt nach dem Namen (Ranking in der Statistik)
     "name_ausgabe": True,             # Ausgabe fragt nach dem Namen (Ranking in der Statistik)
+    "kiosk_zoom": 1.0,                # Zoom des Browsers am Kassen-Rechner selbst (A−/A+)
     # --- Bondrucker (ESC/POS) ---
     "drucker_aktiv": True,            # aus = es wird nie gedruckt
     "drucker_verbindung": "usb",      # "usb" (Gerätedatei) oder "netzwerk" (RAW, Port 9100)
@@ -452,6 +453,10 @@ _HOST = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?$")
 def _pruefe_einstellung(key, value):
     if key not in EINSTELLUNGEN_STANDARD:
         raise DBError(f"Unbekannte Einstellung: {key}")
+    if key == "kiosk_zoom" and type(value) is int:
+        value = float(value)  # JSON kennt 1 und 1.0 nicht getrennt
+    if key == "kiosk_zoom" and type(value) is float and not 0.5 <= value <= 3:
+        raise DBError("Zoom muss zwischen 50 und 300 % liegen")
     if type(value) is not type(EINSTELLUNGEN_STANDARD[key]):
         raise DBError(f"Falscher Typ für {key}")
     if isinstance(value, str):
@@ -578,6 +583,10 @@ def sicherung_erstellen(grund="auto"):
             os.makedirs(BACKUP_DIR, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             ziel = os.path.join(BACKUP_DIR, f"kasse-{stamp}-{grund}.db")
+            n = 2
+            while os.path.exists(ziel):  # nie eine vorhandene Sicherung überschreiben
+                ziel = os.path.join(BACKUP_DIR, f"kasse-{stamp}-{n}-{grund}.db")
+                n += 1
             tmp = ziel + ".tmp"
             src = sqlite3.connect(DB_PATH, timeout=10)
             dst = sqlite3.connect(tmp)
@@ -649,6 +658,44 @@ def startpruefung():
     meldung = f"Datenbank war beschädigt ({grund}) – keine Sicherung vorhanden, neue leere Datenbank"
     print(f"[db] WARNUNG: {meldung}")
     return meldung
+
+
+def sicherung_einspielen(quelle):
+    """Spielt eine Kassen-Datenbank (Sicherung oder hochgeladene Datei) als aktuellen Stand ein.
+    Vorher wird der jetzige Stand als "vor-einspielen" gesichert – so ist auch das umkehrbar.
+    Ältere Programmversionen werden danach automatisch migriert."""
+    try:
+        con = sqlite3.connect(f"file:{quelle}?mode=ro", uri=True, timeout=10)
+        try:
+            ok = con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            tabellen = _tables(con)
+            version = con.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            con.close()
+    except sqlite3.DatabaseError:
+        raise DBError("Das ist keine Kassen-Datenbank") from None
+    if not ok:
+        raise DBError("Die Sicherung ist beschädigt – bitte eine andere wählen")
+    if not {"BESTELLUNGEN", "PRODUKTE", "BESTELLUNGSINHALT"} <= tabellen:
+        raise DBError("Das ist keine Kassen-Datenbank")
+    if version > SCHEMA_VERSION:
+        raise DBError("Die Sicherung stammt von einer neueren Programmversion")
+    vorher = sicherung_erstellen("vor-einspielen")
+    if not vorher:
+        raise DBError("Der aktuelle Stand konnte nicht gesichert werden – es wurde nichts geändert", 500)
+    with _write_lock:
+        src = sqlite3.connect(f"file:{quelle}?mode=ro", uri=True, timeout=10)
+        dst = sqlite3.connect(DB_PATH, timeout=10)
+        try:
+            src.backup(dst)  # ersetzt den Inhalt in einem Schritt, auch während andere lesen
+        finally:
+            dst.close()
+            src.close()
+        global aenderungen
+        aenderungen += 1
+    setup_db()  # WAL wieder an, ältere Sicherungen auf den aktuellen Stand heben
+    print(f"[db] Sicherung eingespielt: {os.path.basename(quelle)} (vorheriger Stand: {os.path.basename(vorher)})")
+    return os.path.basename(vorher)
 
 
 def sicherungen_auflisten():

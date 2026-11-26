@@ -82,7 +82,7 @@ function vollbild() {
 /* Kundendisplay: immer dunkel, gut lesbar aus der Entfernung */
 .front {
   --f-bg: #0f1115; --f-surface: #1a1d23; --f-text: #f4f2ee; --f-muted: #9aa0a8; --f-accent: #e0394e;
-  min-height: 100vh; background: var(--f-bg); color: var(--f-text);
+  min-height: 100vh; min-height: var(--vh100, 100vh); background: var(--f-bg); color: var(--f-text);
   display: flex; flex-direction: column;
   padding: 24px;
   padding: clamp(16px, 2.5vw, 40px);

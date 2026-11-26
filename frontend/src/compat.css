@@ -70,8 +70,8 @@
   html .stationen > * { flex: 1 1 240px; }
   html .kpis > * { flex: 1 1 180px; }
   html .charts > * { flex: 1 1 420px; min-width: 0; }
-  html .geld > * { flex: 0 0 calc(20% - 12px); min-width: 0; }
-  html .geld > .passend { flex-basis: calc(40% - 12px); }
+  html .geld > * { flex: 0 0 calc(16.66% - 12px); min-width: 0; }
+  html .geld > .passend { flex-basis: calc(33.33% - 12px); }
   html .klist > * { flex: 1 1 260px; }
   html .kpis, html .charts { margin-top: 10px; }
 

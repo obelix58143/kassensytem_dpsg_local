@@ -417,12 +417,14 @@ def lauf(args, server):
         kasse.bring_to_front()
         kasse.locator(".korb .person-feld input").fill("Anna")
         kasse.locator(".korb .person-feld input").press("Enter")
-        check("Kasse: Name übernommen", bis(lambda: kasse.locator(".korb .person-name").inner_text() == "Anna"))
+        check("Kasse: Name übernommen, Feld klappt zu", bis(lambda: kasse.locator(".korb .kasse-name").count() == 1
+                                                     and "Anna" in kasse.locator(".korb .kasse-name").inner_text()
+                                                     and kasse.locator(".korb .person").count() == 0))
         kasse.reload(); kasse.wait_for_selector(".tile")
         if args.sim_alt:
             kasse.evaluate(SIM_POST)
-        check("Name bleibt nach Neuladen", bis(lambda: kasse.locator(".korb .person-name").count() == 1
-                                               and kasse.locator(".korb .person-name").inner_text() == "Anna"))
+        check("Name bleibt nach Neuladen", bis(lambda: kasse.locator(".korb .kasse-name").count() == 1
+                                               and "Anna" in kasse.locator(".korb .kasse-name").inner_text()))
         tile(kasse, "Flammkuchen").click()
         kasse.locator("button", has_text="Bestellung aufgeben").click()
         check("Bestellung trägt Kassierer:in", bis(lambda: state()["bestellungen"][0]["kassierer"] == "Anna"),
@@ -453,7 +455,7 @@ def lauf(args, server):
         settings.locator("label.switch", has_text="Namen an der Kasse").click()
         settings.locator("label.switch", has_text="Namen an der Ausgabe").click()
         check("Schalter aus: kein Namensfeld an Kasse und Ausgabe",
-              bis(lambda: kasse.locator(".korb .person").count() == 0 and ausgabe.locator(".ausgabe-person").count() == 0))
+              bis(lambda: kasse.locator(".korb .person, .korb .kasse-name").count() == 0 and ausgabe.locator(".ausgabe-person").count() == 0))
         tile(kasse, "Flammkuchen").click()
         kasse.locator("button", has_text="Bestellung aufgeben").click()
         check("…Bestellung dann ohne Kassierer:in", bis(lambda: state()["bestellungen"][0]["kassierer"] is None
@@ -461,13 +463,81 @@ def lauf(args, server):
         settings.locator("label.switch", has_text="Namen an der Kasse").click()
         settings.locator("label.switch", has_text="Namen an der Ausgabe").click()
         check("Schalter an: Namensfelder wieder da (Name gemerkt)",
-              bis(lambda: kasse.locator(".korb .person-name").count() == 1 and ausgabe.locator(".ausgabe-person").count() == 1))
+              bis(lambda: kasse.locator(".korb .kasse-name").count() == 1 and ausgabe.locator(".ausgabe-person").count() == 1))
+        kasse.locator(".korb .kasse-name").click()
+        kasse.locator(".korb .person-feld input").fill("Anne")
+        kasse.locator(".korb .person-feld input").press("Enter")
+        check("Name wechseln über den Kopf", bis(lambda: "Anne" in kasse.locator(".korb .kasse-name").inner_text()))
         home = seite("/")
         check("Startseite zeigt Adresse für die Tablets",
               bis(lambda: home.locator(".adresse").count() == 1 and "http://" in home.locator(".adresse").inner_text()),
               home.locator(".adresse").all_inner_texts())
         shot(home, "start")
         home.close()
+
+        print("Kleiner Bildschirm, Zoom, Sicherung einspielen")
+        kctx = br.new_context(viewport={"width": 1280, "height": 720})
+        if args.sim_alt:
+            kctx.add_init_script(SIM_INIT)
+        kp = kctx.new_page(); kp.goto(B + "/#/kasse"); kp.wait_for_selector(".tile")
+        if args.sim_alt:
+            kp.evaluate(SIM_POST)
+        for _ in range(3):
+            for t in kp.locator(".tile").all():
+                t.click()
+        kp.locator(".geld .schein").first.click()
+        unten = lambda: kp.evaluate("document.querySelector('.korb .btn-primary.btn-lg').getBoundingClientRect().bottom")  # noqa: E731
+        seite_hoch = lambda: kp.evaluate("document.documentElement.scrollHeight - innerHeight")  # noqa: E731
+        check("1280×720 voller Warenkorb (mit Karten): 'Aufgeben' sichtbar, Seite scrollt nicht",
+              unten() <= 720 and seite_hoch() <= 1, f"unten={unten()} überstand={seite_hoch()}")
+        kp.locator(".zoom button", has_text="A+").click()
+        check("A+ vergrößert (Kiosk: auf dem Server gespeichert)",
+              bis(lambda: state()["einstellungen"]["kiosk_zoom"] == 1.1 and kp.evaluate("document.documentElement.style.zoom") == "1.1"))
+        check("…'Aufgeben' auch mit Zoom sichtbar", bis(lambda: unten() * 1.1 <= 721 or unten() <= 720), unten())
+        kp.reload(); kp.wait_for_selector(".tile")
+        check("Zoom bleibt nach Neuladen", bis(lambda: kp.evaluate("document.documentElement.style.zoom") == "1.1"))
+        kp.locator(".zoom-wert").click()
+        check("Klick auf % setzt 100 % zurück", bis(lambda: state()["einstellungen"]["kiosk_zoom"] == 1.0
+                                                       and kp.evaluate("document.documentElement.style.zoom") == ""))
+        kp.keyboard.press("Escape"); kctx.close()
+
+        anzahl_vorher = len(state()["bestellungen"])
+        sicherung = api("POST", "/sicherungen")["datei"]
+        tile(kasse, "Flammkuchen").click()
+        kasse.locator("button", has_text="Bestellung aufgeben").click()
+        check("Neue Bestellung nach der Sicherung", bis(lambda: len(state()["bestellungen"]) == anzahl_vorher + 1))
+        settings.bring_to_front()
+        settings.locator("button", has_text="Liste aktualisieren").click()
+        m = sicherung.split("-")  # kasse-YYYYMMDD-HHMMSS-manuell.db
+        wann = f"{m[1][6:8]}.{m[1][4:6]}. {m[2][0:2]}:{m[2][2:4]}:{m[2][4:6]}"
+        zeile = settings.locator(".sicherung-zeile", has_text=wann)
+        zeile.wait_for(timeout=5000)
+        zeile.locator("button", has_text="Einspielen").click()
+        settings.locator(".dialog button", has_text="Einspielen").click()
+        check("Sicherung eingespielt: Stand von vorher", bis(lambda: len(state()["bestellungen"]) == anzahl_vorher),
+              f"{len(state()['bestellungen'])} statt {anzahl_vorher} ({sicherung})")
+        offen_soll = lambda: len([b for b in state()["bestellungen"] if b["status"] != "abgeholt"])  # noqa: E731
+        check("…Ausgabe zeigt es live", bis(lambda: ausgabe.locator(".order").count() == offen_soll()),
+              f"{ausgabe.locator('.order').count()} statt {offen_soll()}")
+        vorher_datei = [d for d in api("GET", "/sicherungen")["dateien"] if "vor-einspielen" in d]
+        check("…vorheriger Stand wurde gesichert", len(vorher_datei) == 1, vorher_datei)
+        import urllib.request as _u
+        roh = _u.urlopen(B + "/api/sicherungen/download", timeout=10).read()
+        pfad = os.path.join(tempfile.mkdtemp(), "vom-handy.db")
+        open(pfad, "wb").write(roh)
+        tile(kasse, "Flammkuchen").click()
+        kasse.locator("button", has_text="Bestellung aufgeben").click()
+        bis(lambda: len(state()["bestellungen"]) == anzahl_vorher + 1)
+        settings.locator("label.btn", has_text="Datei hochladen").locator("input").set_input_files(pfad)
+        settings.locator(".dialog button", has_text="Einspielen").click()
+        check("Datei hochladen & einspielen", bis(lambda: len(state()["bestellungen"]) == anzahl_vorher),
+              len(state()["bestellungen"]))
+        falsch = os.path.join(tempfile.mkdtemp(), "bild.db")
+        open(falsch, "wb").write(b"kein sqlite")
+        settings.locator("label.btn", has_text="Datei hochladen").locator("input").set_input_files(falsch)
+        settings.locator(".dialog button", has_text="Einspielen").click()
+        check("Falsche Datei: verständliche Meldung, nichts geändert",
+              toast(settings, "keine Kassen-Datenbank") and len(state()["bestellungen"]) == anzahl_vorher)
 
         print("Mauszeiger: bei Touch aus, bei Maus an")
         tctx = br.new_context(viewport={"width": 1280, "height": 800}, has_touch=True)

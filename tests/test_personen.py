@@ -113,3 +113,11 @@ def test_namen_schalter(api):
     e = api.state()["einstellungen"]
     assert e["name_kasse"] is False and e["name_ausgabe"] is False
     assert api.put("/api/einstellungen", {"name_kasse": "nein"})[0] == 400
+
+
+@pytest.mark.parametrize("wert,ok", [(1.25, True), (1, True), (2, True), (0.4, False), (9, False), ("1", False), (True, False)])
+def test_kiosk_zoom(api, wert, ok):
+    s, _ = api.put("/api/einstellungen", {"kiosk_zoom": wert})
+    assert (s == 200) is ok
+    if ok:
+        assert api.state()["einstellungen"]["kiosk_zoom"] == float(wert)

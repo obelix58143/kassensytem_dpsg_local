@@ -66,6 +66,22 @@ export default {
   logoLoeschen: () => call('DELETE', '/drucker/logo'),
   sicherungen: () => call('GET', '/sicherungen'),
   sicherungJetzt: () => call('POST', '/sicherungen'),
+  sicherungEinspielen: (datei) => call('POST', '/sicherungen/einspielen', { datei }),
+  /** .db-Datei (z.B. vom Handy) hochladen und einspielen */
+  async sicherungHochladen(datei) {
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+    const timer = setTimeout(() => ctrl && ctrl.abort(), 120000)
+    let res
+    try {
+      res = await fetch('/api/sicherungen/hochladen', { method: 'PUT', body: datei, headers: { 'Content-Type': 'application/octet-stream' }, signal: ctrl ? ctrl.signal : undefined })
+    } catch (e) {
+      throw new ApiError('Hochladen fehlgeschlagen – Verbindung prüfen')
+    } finally { clearTimeout(timer) }
+    let data = null
+    try { data = await res.json() } catch { /* leer */ }
+    if (!res.ok) throw new ApiError((data && data.error) || `Fehler ${res.status}`, res.status)
+    return data
+  },
   /** Bilddatei roh hochladen (kein JSON) */
   async logoHochladen(datei) {
     const res = await fetch('/api/drucker/logo', { method: 'PUT', body: datei, headers: { 'Content-Type': datei.type || 'application/octet-stream' } })

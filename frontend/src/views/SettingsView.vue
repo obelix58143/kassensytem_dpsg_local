@@ -154,6 +154,47 @@ async function jetztSichern() {
 }
 onMounted(sicherungenLaden)
 
+const sicherungenMax = ref(8)
+const ANLASS = { auto: 'automatisch', start: 'Programmstart', ende: 'beim Beenden', manuell: 'von Hand', download: 'Download', 'vor-einspielen': 'vor dem Einspielen' }
+// "kasse-20261126-164326-auto.db" -> { wann: "26.11. 16:43", anlass: "automatisch" }
+function sicherungInfo(name) {
+  const m = /^kasse-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d+)?-(.+)\.db$/.exec(name)
+  if (!m) return { wann: name, anlass: '' }
+  return { wann: `${m[3]}.${m[2]}. ${m[4]}:${m[5]}:${m[6]}`, anlass: ANLASS[m[7]] || m[7] }
+}
+const einspielBusy = ref(false)
+async function einspielenBestaetigt(beschreibung) {
+  return confirmDialog({
+    title: 'Sicherung einspielen?',
+    text: `Der aktuelle Stand (alle Bestellungen, Produkte, Einstellungen) wird ersetzt durch: ${beschreibung}. ` +
+      'Der jetzige Stand wird vorher automatisch gesichert („vor dem Einspielen") – so lässt sich das rückgängig machen.',
+    confirmText: 'Einspielen',
+    danger: true
+  })
+}
+async function einspielen(name) {
+  const i = sicherungInfo(name)
+  if (!(await einspielenBestaetigt(`Sicherung vom ${i.wann} (${i.anlass})`))) return
+  einspielBusy.value = true
+  try {
+    await api.sicherungEinspielen(name)
+    toast('Sicherung eingespielt – alle Geräte sind aktualisiert', 'ok', { timeout: 8000 })
+    sicherungenLaden()
+  } catch (e) { showError(e) } finally { einspielBusy.value = false }
+}
+async function hochladen(ev) {
+  const datei = ev.target.files && ev.target.files[0]
+  ev.target.value = ''
+  if (!datei) return
+  if (!(await einspielenBestaetigt(`Datei „${datei.name}"`))) return
+  einspielBusy.value = true
+  try {
+    await api.sicherungHochladen(datei)
+    toast(`„${datei.name}" eingespielt – alle Geräte sind aktualisiert`, 'ok', { timeout: 8000 })
+    sicherungenLaden()
+  } catch (e) { showError(e) } finally { einspielBusy.value = false }
+}
+
 // ---------- Allgemein ----------
 const titelEntwurf = ref(null)
 async function titelSpeichern() {
@@ -297,7 +338,7 @@ async function reset() {
     <section class="card">
       <h2 style="margin-bottom: 12px">Daten &amp; Sicherungen</h2>
       <p class="text-2" style="margin-bottom: 10px">
-        Der Server sichert automatisch alle 5 Minuten (wenn sich etwas geändert hat), beim Start und beim Beenden.
+        Der Server sichert automatisch alle paar Minuten (wenn sich etwas geändert hat), beim Start und beim Beenden.
         <template v-if="sicherung">
           <br>Letzte Sicherung:
           <strong v-if="sicherung.letzte.zeit">{{ new Date(sicherung.letzte.zeit).toLocaleString('de-DE') }}</strong>
@@ -311,6 +352,32 @@ async function reset() {
         <a class="btn btn-sm" href="/api/sicherungen/download"><Icon name="download" :size="16" /> Datenbank herunterladen</a>
         <a class="btn btn-sm" href="/api/export.csv" download><Icon name="download" :size="16" /> Bestellungen als CSV</a>
       </div>
+
+      <h3 class="einspielen-titel">Sicherung einspielen</h3>
+      <p class="text-2" style="margin-bottom: 8px">
+        Wenn etwas schiefgegangen ist: einen früheren Stand zurückholen – oder eine heruntergeladene
+        Datenbank-Datei (z.B. vom Handy, oder vom alten Kassen-Rechner) auf diesen Rechner übertragen.
+      </p>
+      <div class="row" style="margin-bottom: 10px">
+        <label class="btn btn-sm" :class="{ disabled: einspielBusy }">
+          <Icon name="download" :size="16" style="transform: rotate(180deg)" /> Datei hochladen &amp; einspielen …
+          <input type="file" accept=".db,application/octet-stream,application/x-sqlite3" class="sr-only" :disabled="einspielBusy" @change="hochladen">
+        </label>
+        <button class="btn btn-sm btn-ghost" @click="sicherungenLaden">Liste aktualisieren</button>
+      </div>
+      <div v-if="sicherung && sicherung.dateien.length" class="sicherungen">
+        <div v-for="d in sicherung.dateien.slice(0, sicherungenMax)" :key="d" class="sicherung-zeile">
+          <span class="num"><strong>{{ sicherungInfo(d).wann }}</strong></span>
+          <span class="muted">{{ sicherungInfo(d).anlass }}</span>
+          <span class="spacer"></span>
+          <button class="btn btn-sm" :disabled="einspielBusy" @click="einspielen(d)">Einspielen</button>
+        </div>
+        <button v-if="sicherung.dateien.length > sicherungenMax" class="btn btn-sm btn-ghost" style="margin-top: 6px" @click="sicherungenMax += 20">
+          Ältere anzeigen ({{ sicherung.dateien.length - sicherungenMax }})
+        </button>
+      </div>
+      <p v-else-if="sicherung" class="muted">Noch keine Sicherungen vorhanden.</p>
+
       <p class="muted" style="font-size: .85rem; margin-top: 12px">
         Dieses Gerät: {{ geraet.browser }}<span v-if="geraet.android"> · Android {{ geraet.android }}</span>
         · Grid {{ geraet.grid ? 'ja' : 'nein (Fallback)' }} · Flex-Abstände {{ geraet.flexgap ? 'ja' : 'nein (Fallback)' }}
@@ -326,6 +393,12 @@ async function reset() {
 </template>
 
 <style>
+.einspielen-titel { font-size: 1rem; margin: 20px 0 4px; padding-top: 14px; border-top: 1px solid var(--border); }
+.sicherungen { max-width: 640px; }
+.sicherung-zeile { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.sicherung-zeile:last-of-type { border-bottom: 0; }
+label.btn { position: relative; cursor: pointer; }
+label.btn.disabled { opacity: .5; pointer-events: none; }
 .settings { display: flex; flex-direction: column; gap: 16px; max-width: 1200px; }
 .plist { display: flex; flex-direction: column; gap: 10px; }
 .pitem {
