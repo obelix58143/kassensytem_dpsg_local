@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("KASSE_DB", os.path.join(BASE_DIR, "data.db"))
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 TYPEN = ("normal", "pfand")  # pfand = Pfandrückgabe-Produkt
 STATUS = ("bestellt", "bereit", "abgeholt")
 
@@ -271,6 +271,16 @@ def _sql_v2_to_v3(aus_v1):
     return sql
 
 
+def _sql_v3_to_v4():
+    """v4: wer kassiert / wer ausgegeben hat (Ranking in der Statistik),
+    Produkte auf dem Kundendisplay ausblendbar."""
+    return """
+        ALTER TABLE BESTELLUNGEN ADD COLUMN kassierer TEXT;
+        ALTER TABLE BESTELLUNGEN ADD COLUMN ausgabe TEXT;
+        ALTER TABLE PRODUKTE ADD COLUMN display INTEGER NOT NULL DEFAULT 1;
+    """
+
+
 def _tables_sql_check(con):
     return con.execute("PRAGMA foreign_key_check").fetchall()
 
@@ -289,13 +299,15 @@ def setup_db():
             return
 
         if not tables:
-            script = SCHEMA_V2 + _sql_v2_to_v3(aus_v1=False)
+            script = SCHEMA_V2 + _sql_v2_to_v3(aus_v1=False) + _sql_v3_to_v4()
             print(f"[db] neue Datenbank angelegt: {DB_PATH}")
         else:
             von = max(version, 1)
             backup = _backup(f"v{von}")
             print(f"[db] migriere Schema v{von} -> v{SCHEMA_VERSION}, Sicherung: {backup}")
-            script = (_sql_v1_to_v2() if von < 2 else "") + _sql_v2_to_v3(aus_v1=von < 2)
+            script = ((_sql_v1_to_v2() if von < 2 else "")
+                      + (_sql_v2_to_v3(aus_v1=von < 2) if von < 3 else "")
+                      + _sql_v3_to_v4())
 
         con.execute("PRAGMA foreign_keys = OFF")  # wirkt nur außerhalb einer Transaktion
         try:
@@ -339,6 +351,7 @@ def _produkt_dict(r):
         "aktiv": bool(r["aktiv"]),
         "sortierung": r["sortierung"],
         "typ": r["typ"],
+        "auf_display": bool(r["display"]),
     }
 
 
@@ -378,6 +391,8 @@ def get_bestellungen(con):
             "preis_cent": r["preis_cent"],
             "pfand_cent": r["pfand_cent"],
             "nur_pfand": bool(r["nur_pfand"]),
+            "kassierer": r["kassierer"],
+            "ausgabe": r["ausgabe"],
             "produkte": inhalt.get(r["id"], []),
         }
         for r in rows
@@ -678,7 +693,8 @@ def export_rows():
             SELECT b.id, datetime(b.zeitpunkt_annahme, 'localtime') AS zeitpunkt_annahme,
                    datetime(b.zeitpunkt_abgeholt, 'localtime') AS zeitpunkt_abgeholt, b.status,
                    k.beschreibung AS karte, b.eigenbedarf, p.name AS produkt,
-                   p.typ, bi.anzahl, bi.einzelpreis_cent, bi.einzelpfand_cent, b.preis_cent, b.pfand_cent
+                   p.typ, bi.anzahl, bi.einzelpreis_cent, bi.einzelpfand_cent, b.preis_cent, b.pfand_cent,
+                   b.kassierer, b.ausgabe
             FROM BESTELLUNGEN b
             JOIN BESTELLUNGSINHALT bi ON bi.bestellung_id = b.id
             JOIN PRODUKTE p ON p.id = bi.produkt_id
@@ -696,6 +712,13 @@ def _cent(value, field):
     if isinstance(value, bool) or not isinstance(value, int) or value < 0 or value > 1_000_000:
         raise DBError(f"{field} muss eine ganze Zahl in Cent >= 0 sein")
     return value
+
+
+def _person(value):
+    """Name von Kassierer:in / Ausgabe – optional, leer = unbekannt."""
+    if value is None:
+        return None
+    return _text(value, "Name", 40) or None
 
 
 def _text(value, field, max_len=200):
@@ -724,8 +747,9 @@ def create_produkt(data):
     with _write() as con:
         sort = con.execute("SELECT COALESCE(MAX(sortierung), 0) + 1 FROM PRODUKTE").fetchone()[0]
         cur = con.execute(
-            "INSERT INTO PRODUKTE (name, beschreibung, preis_cent, pfand_cent, sortierung, typ) VALUES (?, ?, ?, ?, ?, ?)",
-            (name, _text(data.get("beschreibung", ""), "Beschreibung", 1000), preis, pfand, sort, typ),
+            "INSERT INTO PRODUKTE (name, beschreibung, preis_cent, pfand_cent, sortierung, typ, display) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, _text(data.get("beschreibung", ""), "Beschreibung", 1000), preis, pfand, sort, typ,
+             0 if data.get("auf_display") is False else 1),
         )
         return _produkt_dict(con.execute("SELECT * FROM PRODUKTE WHERE id = ?", (cur.lastrowid,)).fetchone())
 
@@ -744,6 +768,8 @@ def update_produkt(id, data):
         fields["pfand_cent"] = _cent(data["pfand_cent"], "Pfand")
     if "aktiv" in data:
         fields["aktiv"] = 1 if data["aktiv"] else 0
+    if "auf_display" in data:
+        fields["display"] = 1 if data["auf_display"] else 0
     if "sortierung" in data:
         if not isinstance(data["sortierung"], int):
             raise DBError("Sortierung muss eine Zahl sein")
@@ -835,6 +861,7 @@ def add_bestellung(data):
     client_ref = data.get("client_ref")
     if client_ref is not None and (not isinstance(client_ref, str) or not 8 <= len(client_ref) <= 64):
         raise DBError("Ungültige client_ref")
+    kassierer = _person(data.get("kassierer"))
 
     with _write() as con:
         # Wiederholte Anfrage (z.B. Timeout im WLAN, Kasse drückt nochmal):
@@ -867,9 +894,9 @@ def add_bestellung(data):
             # Reine Rückgabe: nichts abzuholen, gleich erledigt, keine Karte
             cur = con.execute(
                 """INSERT INTO BESTELLUNGEN (zeitpunkt_annahme, zeitpunkt_abgeholt, status, karte, eigenbedarf,
-                                             preis_cent, pfand_cent, client_ref, nur_pfand)
-                   VALUES (datetime('now'), datetime('now'), 'abgeholt', NULL, ?, 0, ?, ?, 1)""",
-                (int(eigenbedarf), pfand, client_ref),
+                                             preis_cent, pfand_cent, client_ref, nur_pfand, kassierer)
+                   VALUES (datetime('now'), datetime('now'), 'abgeholt', NULL, ?, 0, ?, ?, 1, ?)""",
+                (int(eigenbedarf), pfand, client_ref, kassierer),
             )
         else:
             if karte is not None:
@@ -878,9 +905,10 @@ def add_bestellung(data):
                 if con.execute("SELECT 1 FROM BESTELLUNGEN WHERE karte = ? AND status != 'abgeholt'", (karte,)).fetchone():
                     raise DBError("Karte ist bereits vergeben", 409)
             cur = con.execute(
-                """INSERT INTO BESTELLUNGEN (zeitpunkt_annahme, status, karte, eigenbedarf, preis_cent, pfand_cent, client_ref)
-                   VALUES (datetime('now'), 'bestellt', ?, ?, ?, ?, ?)""",
-                (karte, int(eigenbedarf), preis, pfand, client_ref),
+                """INSERT INTO BESTELLUNGEN (zeitpunkt_annahme, status, karte, eigenbedarf, preis_cent, pfand_cent,
+                                            client_ref, kassierer)
+                   VALUES (datetime('now'), 'bestellt', ?, ?, ?, ?, ?, ?)""",
+                (karte, int(eigenbedarf), preis, pfand, client_ref, kassierer),
             )
         bid = cur.lastrowid
         con.executemany(
@@ -891,10 +919,13 @@ def add_bestellung(data):
         return {"id": bid, "preis_cent": preis, "pfand_cent": pfand, "nur_pfand": nur_pfand, "wiederholt": False}
 
 
-def set_status(id, status):
-    """bestellt -> [bereit] -> abgeholt, auch rückwärts (Rückgängig)."""
+def set_status(id, status, person=None):
+    """bestellt -> [bereit] -> abgeholt, auch rückwärts (Rückgängig).
+    person: wer an der Ausgabe fertig gemeldet hat (für die Statistik). Gezählt wird, wer die
+    Bestellung als Erstes fertig meldet – mit Bereit-Schritt also, wer „Fertig" drückt."""
     if status not in STATUS:
         raise DBError(f"Ungültiger Status, erlaubt: {', '.join(STATUS)}")
+    person = _person(person)
     with _write() as con:
         r = con.execute("SELECT status, karte, nur_pfand FROM BESTELLUNGEN WHERE id = ?", (id,)).fetchone()
         if r is None:
@@ -909,15 +940,17 @@ def set_status(id, status):
             # Rückgängig, aber die Karte wurde inzwischen neu vergeben
             raise DBError("Karte wurde schon neu vergeben – rückgängig nicht möglich", 409)
         if status == "abgeholt":
-            con.execute("UPDATE BESTELLUNGEN SET status = 'abgeholt', zeitpunkt_abgeholt = datetime('now') WHERE id = ?", (id,))
+            con.execute("""UPDATE BESTELLUNGEN SET status = 'abgeholt', zeitpunkt_abgeholt = datetime('now'),
+                           ausgabe = COALESCE(ausgabe, ?) WHERE id = ?""", (person, id))
         elif status == "bereit":
             con.execute(
                 """UPDATE BESTELLUNGEN SET status = 'bereit', zeitpunkt_abgeholt = NULL,
-                   zeitpunkt_bereit = COALESCE(zeitpunkt_bereit, datetime('now')) WHERE id = ?""", (id,))
+                   zeitpunkt_bereit = COALESCE(zeitpunkt_bereit, datetime('now')),
+                   ausgabe = COALESCE(ausgabe, ?) WHERE id = ?""", (person, id))
         else:
             con.execute(
-                """UPDATE BESTELLUNGEN SET status = 'bestellt', zeitpunkt_bereit = NULL, zeitpunkt_abgeholt = NULL
-                   WHERE id = ?""", (id,))
+                """UPDATE BESTELLUNGEN SET status = 'bestellt', zeitpunkt_bereit = NULL, zeitpunkt_abgeholt = NULL,
+                   ausgabe = NULL WHERE id = ?""", (id,))
 
 
 def storno(id):

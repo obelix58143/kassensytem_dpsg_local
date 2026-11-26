@@ -152,7 +152,36 @@ export function berechne({ bestellungen, produktById, karteById, tag, bucketMin,
   }
   const karten = [...kartenMap.entries()].map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n)
 
+  // --- Ranking Kasse: wer hat am meisten eingenommen (Waren, ohne Pfand) ---
+  const kasseMap = new Map()
+  for (const b of liste) {
+    if (!b.kassierer) continue
+    const e = kasseMap.get(b.kassierer) || { name: b.kassierer, umsatz: 0, bestellungen: 0, stk: 0 }
+    e.bestellungen++
+    if (!b.eigenbedarf) e.umsatz += b.preis_cent
+    for (const p of b.produkte) if (!istPfandProdukt(p.id)) e.stk += p.anzahl
+    kasseMap.set(b.kassierer, e)
+  }
+  const rankingKasse = [...kasseMap.values()]
+    .map(e => ({ ...e, avgBon: e.bestellungen ? e.umsatz / e.bestellungen : 0 }))
+    .sort((a, b) => b.umsatz - a.umsatz || b.bestellungen - a.bestellungen || a.name.localeCompare(b.name))
+
+  // --- Ranking Ausgabe: wer meldet am schnellsten fertig (Bestellung -> fertig/abgeholt) ---
+  const ausMap = new Map()
+  for (const b of liste) {
+    const fertig = b.tb ?? b.t1
+    if (!b.ausgabe || fertig == null) continue
+    const e = ausMap.get(b.ausgabe) || { name: b.ausgabe, zeiten: [] }
+    e.zeiten.push(fertig - b.t0)
+    ausMap.set(b.ausgabe, e)
+  }
+  const rankingAusgabe = [...ausMap.values()]
+    .map(e => ({ name: e.name, anzahl: e.zeiten.length, avg: avg(e.zeiten), median: median(e.zeiten), schnellste: Math.min(...e.zeiten) }))
+    .sort((a, b) => a.avg - b.avg || b.anzahl - a.anzahl || a.name.localeCompare(b.name))
+
   return {
+    rankingKasse,
+    rankingAusgabe,
     kpi: {
       umsatz,
       pfand,

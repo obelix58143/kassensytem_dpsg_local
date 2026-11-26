@@ -305,10 +305,10 @@ def lauf(args, server):
         check("Andere Kasse: Karte automatisch abgewählt",
               bis(lambda: kasse2.locator(".chip[aria-pressed=true]").inner_text().strip() == "Ohne"))
         tile(kasse2, "Glühwein").click()
-        pitem(settings, "Glühwein").locator("label.switch").click()  # deaktivieren
+        pitem(settings, "Glühwein").locator("label.switch").first.click()  # deaktivieren
         check("Deaktiviertes Produkt fliegt aus fremdem Warenkorb",
               bis(lambda: "Glühwein" not in kasse2.locator(".positionen").inner_text()))
-        pitem(settings, "Glühwein").locator("label.switch").click()  # wieder an
+        pitem(settings, "Glühwein").locator("label.switch").first.click()  # wieder an
 
         print("Einstellungen: Entwurf überlebt Live-Updates")
         zeile = pitem(settings, "Flammkuchen")
@@ -412,6 +412,50 @@ def lauf(args, server):
         ausgabe.locator(".order").first.locator("button[aria-label=Stornieren]").click()
         ausgabe.locator("dialog button", has_text="Stornieren").click()
         check("Storno über Dialog", bis(lambda: anzahl_bestellungen() == n0 - 1))
+
+        print("Wer kassiert / wer gibt aus, Ranking, Display, Adresse")
+        kasse.bring_to_front()
+        kasse.locator(".korb .person-feld input").fill("Anna")
+        kasse.locator(".korb .person-feld input").press("Enter")
+        check("Kasse: Name übernommen", bis(lambda: kasse.locator(".korb .person-name").inner_text() == "Anna"))
+        kasse.reload(); kasse.wait_for_selector(".tile")
+        if args.sim_alt:
+            kasse.evaluate(SIM_POST)
+        check("Name bleibt nach Neuladen", bis(lambda: kasse.locator(".korb .person-name").count() == 1
+                                               and kasse.locator(".korb .person-name").inner_text() == "Anna"))
+        tile(kasse, "Flammkuchen").click()
+        kasse.locator("button", has_text="Bestellung aufgeben").click()
+        check("Bestellung trägt Kassierer:in", bis(lambda: state()["bestellungen"][0]["kassierer"] == "Anna"),
+              state()["bestellungen"][0].get("kassierer"))
+        nr_anna = str(state()["bestellungen"][0]["id"])
+        ausgabe.bring_to_front()
+        ausgabe.locator(".ausgabe-person input").fill("Bea")
+        ausgabe.locator(".ausgabe-person input").press("Enter")
+        karte_anna = ausgabe.locator(".order", has=ausgabe.locator(".order-id", has_text=f"#{nr_anna}"))
+        karte_anna.wait_for(timeout=3000)
+        karte_anna.locator("button", has_text="Abgeholt").click()
+        ausg = lambda: next(x for x in state()["bestellungen"] if str(x["id"]) == nr_anna)["ausgabe"]  # noqa: E731
+        check("Abgeholt merkt Ausgabe-Person", bis(lambda: ausg() == "Bea"), ausg())
+        stat = seite("/statistik")
+        stat.wait_for_selector(".ranking", timeout=5000)
+        check("Statistik: Kassen-Ranking mit Anna", "Anna" in stat.locator("#h-rk").locator("..").inner_text())
+        check("Statistik: Ausgabe-Ranking mit Bea", "Bea" in stat.locator("#h-ra").locator("..").inner_text())
+        shot(stat, "ranking")
+        stat.close()
+        settings.bring_to_front()
+        pitem(settings, "Glühwein").locator("label.switch", has_text="Display").click()
+        check("Glühwein vom Kundendisplay verschwunden",
+              bis(lambda: "Glühwein" not in front.locator(".front-menu").inner_text()))
+        check("…an der Kasse weiter verkaufbar", tile(kasse, "Glühwein").count() == 1)
+        check("…Flammkuchen bleibt auf dem Display", "Flammkuchen" in front.locator(".front-menu").inner_text())
+        pitem(settings, "Glühwein").locator("label.switch", has_text="Display").click()
+        check("Wieder eingeblendet", bis(lambda: "Glühwein" in front.locator(".front-menu").inner_text()))
+        home = seite("/")
+        check("Startseite zeigt Adresse für die Tablets",
+              bis(lambda: home.locator(".adresse").count() == 1 and "http://" in home.locator(".adresse").inner_text()),
+              home.locator(".adresse").all_inner_texts())
+        shot(home, "start")
+        home.close()
 
         print("Mauszeiger: bei Touch aus, bei Maus an")
         tctx = br.new_context(viewport={"width": 1280, "height": 800}, has_touch=True)

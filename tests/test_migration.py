@@ -130,3 +130,27 @@ def test_migration_rollback(tmp_path, monkeypatch):
     assert c.execute("PRAGMA user_version").fetchone()[0] == 0
     assert c.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall() == vorher
     assert c.execute("SELECT count(*) FROM BESTELLUNGEN").fetchone()[0] == 5
+
+
+def test_v3_migration_behaelt_alles(tmp_path, monkeypatch):
+    """Die Datenbank vom Einsatz (v3) bekommt Kassierer/Ausgabe/Display dazu, ohne Datenverlust."""
+    path = str(tmp_path / "data.db")
+    c = sqlite3.connect(path)
+    c.executescript(database.SCHEMA_V2 + database._sql_v2_to_v3(aus_v1=False))
+    c.executescript("""
+        INSERT INTO PRODUKTE (name, preis_cent, pfand_cent) VALUES ('Elsässer', 800, 200);
+        INSERT INTO BESTELLUNGEN (zeitpunkt_annahme, status, preis_cent, pfand_cent) VALUES ('2026-11-27 18:00:00', 'bestellt', 800, 200);
+        INSERT INTO BESTELLUNGSINHALT VALUES (1, 1, 1, 800, 200);
+        INSERT INTO EINSTELLUNGEN VALUES ('titel', '"Stand"');
+        PRAGMA user_version = 3;
+    """)
+    c.close()
+    monkeypatch.setattr(database, "DB_PATH", path)
+    database.setup_db()
+    s = database.get_state()
+    assert s["produkte"][0]["auf_display"] is True
+    assert s["bestellungen"][0]["kassierer"] is None and s["bestellungen"][0]["preis_cent"] == 800
+    assert s["einstellungen"]["titel"] == "Stand"
+    assert len(glob.glob(path + ".v3-*.bak")) == 1
+    database.setup_db()  # zweiter Start: nichts mehr zu tun
+    assert len(glob.glob(path + ".v3-*.bak")) == 1

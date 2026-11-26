@@ -72,6 +72,10 @@ async function pSpeichern(p) {
   } catch (e) { showError(e) }
 }
 
+async function pDisplay(p, an) {
+  try { await api.updateProdukt(p.id, { auf_display: an }) } catch (e) { showError(e) }
+}
+
 async function pAktiv(p, aktiv) {
   try { await api.updateProdukt(p.id, { aktiv }) } catch (e) { showError(e) }
 }
@@ -232,6 +236,10 @@ async function reset() {
             <label class="switch" :title="p.aktiv ? 'An der Kasse sichtbar' : 'Ausgeblendet'">
               <input type="checkbox" :checked="p.aktiv" @change="pAktiv(p, $event.target.checked)">
               <span class="hide-sm">{{ p.aktiv ? 'Aktiv' : 'Aus' }}</span>
+            </label>
+            <label v-if="p.typ !== 'pfand'" class="switch" :title="p.auf_display !== false ? 'Wird auf dem Kundendisplay angezeigt' : 'Nicht auf dem Kundendisplay (an der Kasse weiter verkaufbar)'">
+              <input type="checkbox" :checked="p.auf_display !== false" @change="pDisplay(p, $event.target.checked)">
+              <span class="hide-sm">Display</span>
             </label>
             <span class="muted num" style="font-size: .85rem">{{ verkauft.get(p.id) || 0 }}× {{ p.typ === 'pfand' ? 'zurück' : 'verkauft' }}</span>
           </div>

@@ -16,6 +16,7 @@ from flask_sock import Sock
 from simple_websocket import ConnectionClosed
 
 import akku
+import netz
 import database
 import printer
 
@@ -117,7 +118,7 @@ def api_state():
 @app.get("/api/system")
 def api_system():
     # Akku des Kassen-Rechners (None, wenn keiner da ist)
-    return jsonify({"akku": akku.status()})
+    return jsonify({"akku": akku.status(), "adressen": netz.adressen(), "hostname": netz.hostname()})
 
 
 @app.get("/api/drucker")
@@ -177,7 +178,8 @@ def api_bestellung_neu():
 
 @app.put("/api/bestellungen/<int:id>/status")
 def api_bestellung_status(id):
-    database.set_status(id, _body().get("status"))
+    body = _body()
+    database.set_status(id, body.get("status"), body.get("person"))
     return _changed()
 
 
@@ -275,12 +277,14 @@ def api_export():
     w = csv.writer(buf, delimiter=";")
     eur = lambda c: f"{c / 100:.2f}".replace(".", ",")
     w.writerow(["bestellung", "angenommen", "abgeholt", "status", "karte", "eigenbedarf", "produkt", "typ",
-                "anzahl", "einzelpreis_eur", "einzelpfand_eur", "bestellung_preis_eur", "bestellung_pfand_eur"])
+                "anzahl", "einzelpreis_eur", "einzelpfand_eur", "bestellung_preis_eur", "bestellung_pfand_eur",
+                "kassierer", "ausgabe"])
     for r in database.export_rows():
         w.writerow([
             r["id"], r["zeitpunkt_annahme"], r["zeitpunkt_abgeholt"] or "", r["status"], _csv_text(r["karte"] or ""),
             "ja" if r["eigenbedarf"] else "nein", _csv_text(r["produkt"]), r["typ"], r["anzahl"],
             eur(r["einzelpreis_cent"]), eur(r["einzelpfand_cent"]), eur(r["preis_cent"]), eur(r["pfand_cent"]),
+            _csv_text(r["kassierer"] or ""), _csv_text(r["ausgabe"] or ""),
         ])
     # BOM, damit Excel die Umlaute richtig erkennt
     return Response("﻿" + buf.getvalue(), mimetype="text/csv",

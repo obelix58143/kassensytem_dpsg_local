@@ -55,7 +55,7 @@ export function newClientRef() {
 
 export default {
   addBestellung: (b) => call('POST', '/bestellungen', b),
-  setStatus: (id, status) => call('PUT', `/bestellungen/${id}/status`, { status }),
+  setStatus: (id, status, person) => call('PUT', `/bestellungen/${id}/status`, person ? { status, person } : { status }),
   storno: (id) => call('DELETE', `/bestellungen/${id}`),
   bonNachdrucken: (id) => call('POST', `/bestellungen/${id}/bon`),
   nummerDrucken: (id) => call('POST', `/bestellungen/${id}/nummer`),

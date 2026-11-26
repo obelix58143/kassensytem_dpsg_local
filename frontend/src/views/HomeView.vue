@@ -1,5 +1,6 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import api from '../api.js'
 import { offeneBestellungen, serverNow, state } from '../store.js'
 import { tagKey } from '../stats.js'
 import { euro } from '../format.js'
@@ -12,6 +13,20 @@ const heute = computed(() => {
     umsatz: b.reduce((s, x) => s + (x.eigenbedarf ? 0 : x.preis_cent), 0)
   }
 })
+
+// Adresse des Kassen-Rechners zum Abtippen auf den Tablets
+const adressen = ref(null) // null = noch unbekannt
+const hostname = ref('')
+async function ladeAdressen() {
+  try {
+    const r = await api.system()
+    adressen.value = r.adressen || []
+    hostname.value = r.hostname || ''
+  } catch { /* offline – alter Stand bleibt */ }
+}
+let timer
+onMounted(() => { ladeAdressen(); timer = setInterval(ladeAdressen, 30000) })
+onBeforeUnmount(() => clearInterval(timer))
 
 const stationen = [
   { to: '/kasse', title: 'Kasse', text: 'Bestellungen aufnehmen, Rückgeld berechnen, Bon drucken', icon: '€' },
@@ -35,6 +50,14 @@ const stationen = [
         <div class="home-kpi"><span class="muted">Offen</span><strong>{{ offeneBestellungen.length }}</strong></div>
       </div>
     </div>
+    <div v-if="adressen" class="card adresse" :class="{ fehlt: !adressen.length }">
+      <span class="adresse-label">Tablets verbinden – im Browser eintippen:</span>
+      <template v-if="adressen.length">
+        <strong v-for="ip in adressen.slice(0, 2)" :key="ip" class="adresse-ip num">http://{{ ip }}</strong>
+        <span v-if="hostname" class="muted">oder http://{{ hostname }}.local</span>
+      </template>
+      <strong v-else class="adresse-ip">Kein Netzwerk – WLAN / Router prüfen</strong>
+    </div>
     <div class="stationen">
       <router-link v-for="s in stationen" :key="s.to" :to="s.to" class="station card">
         <span class="station-icon" aria-hidden="true">{{ s.icon }}</span>
@@ -52,6 +75,11 @@ const stationen = [
 .home-kpi { display: flex; flex-direction: column; }
 .home-kpi span { font-size: .8rem; font-weight: 600; }
 .home-kpi strong { font-size: 1.6rem; }
+.adresse { display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; padding: 14px 20px; margin-bottom: 18px; border-left: 6px solid var(--primary); }
+.adresse.fehlt { border-left-color: var(--danger); }
+.adresse-label { font-weight: 600; color: var(--text-2); }
+.adresse-ip { font-size: 1.6rem; font-weight: 800; letter-spacing: .01em; color: var(--primary); }
+.adresse.fehlt .adresse-ip { color: var(--danger); font-size: 1.2rem; }
 .stationen { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
 .station { display: flex; flex-direction: column; gap: 6px; text-decoration: none; padding: 22px; transition: transform .08s, border-color .12s; }
 .station:hover { border-color: var(--primary); transform: translateY(-2px); }

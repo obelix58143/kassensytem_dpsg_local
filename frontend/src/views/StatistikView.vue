@@ -135,6 +135,8 @@ const kartenChart = (t) => {
   }
 }
 
+const medaille = (i) => ['🥇', '🥈', '🥉'][i] || `${i + 1}.`
+
 const produktChartHoehe = computed(() => Math.max(160, s.value.produkte.length * 40 + 40))
 const kartenChartHoehe = computed(() => Math.max(140, s.value.karten.length * 34 + 40))
 </script>
@@ -243,6 +245,41 @@ const kartenChartHoehe = computed(() => Math.max(140, s.value.karten.length * 34
         </section>
       </div>
 
+      <div v-if="s.rankingKasse.length || s.rankingAusgabe.length" class="rankings">
+        <section v-if="s.rankingKasse.length" class="card ranking" aria-labelledby="h-rk">
+          <h2 id="h-rk">🏆 Kasse – meiste Einnahmen</h2>
+          <p class="chart-sub">Warenumsatz ohne Pfand und Eigenbedarf</p>
+          <table class="table">
+            <thead><tr><th></th><th>Name</th><th class="r">Umsatz</th><th class="r">Bestellungen</th><th class="r">Ø Bon</th></tr></thead>
+            <tbody>
+              <tr v-for="(r, i) in s.rankingKasse" :key="r.name">
+                <td class="platz">{{ medaille(i) }}</td>
+                <td><strong>{{ r.name }}</strong></td>
+                <td class="r num"><strong>{{ euro(r.umsatz) }}</strong></td>
+                <td class="r num">{{ r.bestellungen }}</td>
+                <td class="r num">{{ euro(r.avgBon) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+        <section v-if="s.rankingAusgabe.length" class="card ranking" aria-labelledby="h-ra">
+          <h2 id="h-ra">⚡ Ausgabe – schnellste Bearbeitung</h2>
+          <p class="chart-sub">Ø Zeit von der Bestellung bis „{{ state.einstellungen.bereit_aktiv ? 'Fertig' : 'Abgeholt' }}"</p>
+          <table class="table">
+            <thead><tr><th></th><th>Name</th><th class="r">Ø Zeit</th><th class="r">Bearbeitet</th><th class="r">Schnellste</th></tr></thead>
+            <tbody>
+              <tr v-for="(r, i) in s.rankingAusgabe" :key="r.name">
+                <td class="platz">{{ medaille(i) }}</td>
+                <td><strong>{{ r.name }}</strong></td>
+                <td class="r num"><strong>{{ dauer(r.avg) }}</strong></td>
+                <td class="r num">{{ r.anzahl }}</td>
+                <td class="r num">{{ dauer(r.schnellste) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+
       <section class="card" style="margin-top: 16px; overflow-x: auto">
         <h2 style="margin-bottom: 8px">Produkte im Detail</h2>
         <table class="table">
@@ -278,4 +315,9 @@ const kartenChartHoehe = computed(() => Math.max(140, s.value.karten.length * 34
 .chart-card { padding: 16px 16px 8px; min-width: 0; }
 .chart-card h2 { font-size: 1rem; margin-bottom: 4px; }
 .chart-sub { font-size: .8rem; color: var(--muted); }
+.rankings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; margin-top: 16px; }
+.ranking { padding: 16px; overflow-x: auto; }
+.ranking h2 { font-size: 1.05rem; margin-bottom: 2px; }
+.ranking .table { margin-top: 8px; }
+.ranking .platz { width: 2.2em; font-size: 1.2rem; }
 </style>

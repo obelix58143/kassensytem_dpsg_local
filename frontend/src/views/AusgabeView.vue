@@ -7,6 +7,8 @@ import { confirmDialog, showError, toast } from '../ui.js'
 import BestellPositionen from '../components/BestellPositionen.vue'
 import OrderCard from '../components/OrderCard.vue'
 import Icon from '../components/Icon.vue'
+import PersonWahl from '../components/PersonWahl.vue'
+import { ausgabePerson, letzteAusgabe } from '../personen.js'
 
 const maxAbgeholt = ref(8)
 const busy = ref(new Set())
@@ -37,7 +39,8 @@ async function run(id, fn) {
 
 function setStatus(b, status, text, undoStatus) {
   run(b.id, async () => {
-    await api.setStatus(b.id, status)
+    // Wer fertig meldet, zählt fürs Ranking „schnellste Bearbeitung"
+    await api.setStatus(b.id, status, ausgabePerson.value || null)
     toast(`#${b.id} ${text}`, 'ok', { action: { label: 'Rückgängig', run: () => run(b.id, () => api.setStatus(b.id, undoStatus)) } })
   })
 }
@@ -73,6 +76,8 @@ function bon(b) {
         <span v-for="p in zuProduzieren" :key="p.id" class="badge badge-primary prod-badge">{{ p.anzahl }}× {{ p.name }}</span>
       </div>
     </div>
+
+    <PersonWahl v-model="ausgabePerson" label="Ausgabe:" :vorschlaege="letzteAusgabe" class="ausgabe-person" />
 
     <div class="ausgabe">
       <div>
@@ -135,6 +140,7 @@ function bon(b) {
 <style>
 .ausgabe { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
 @media (max-width: 1000px) { .ausgabe { grid-template-columns: minmax(0, 1fr); } }
+.ausgabe-person { margin-bottom: 16px; max-width: 640px; }
 .ausgabe-sec + .ausgabe-sec { margin-top: 28px; }
 .sec-title { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .produktion { gap: 6px; }

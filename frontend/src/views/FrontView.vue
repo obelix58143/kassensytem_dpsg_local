@@ -1,10 +1,10 @@
 <script setup>
 import { computed } from 'vue'
-import { abholbereit, inZubereitung, karteById, offeneBestellungen, serverNow, state, verkaufsProdukte } from '../store.js'
+import { abholbereit, inZubereitung, karteById, offeneBestellungen, serverNow, state, displayProdukte } from '../store.js'
 import { euro } from '../format.js'
 
 const uhr = computed(() => new Date(serverNow()).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))
-const mitPfand = computed(() => verkaufsProdukte.value.some(p => p.pfand_cent))
+const mitPfand = computed(() => displayProdukte.value.some(p => p.pfand_cent))
 const bereitAktiv = computed(() => !!state.einstellungen.bereit_aktiv)
 // Ohne Bereit-Schritt ist alles Offene „in Zubereitung"
 const zubereitung = computed(() => (bereitAktiv.value ? inZubereitung.value : offeneBestellungen.value))
@@ -64,7 +64,7 @@ function vollbild() {
       <section class="front-menu">
         <h1>Unser Angebot</h1>
         <ul>
-          <li v-for="p in verkaufsProdukte" :key="p.id">
+          <li v-for="p in displayProdukte" :key="p.id">
             <div>
               <div class="m-name">{{ p.name }}</div>
               <div v-if="p.beschreibung" class="m-desc">{{ p.beschreibung }}</div>

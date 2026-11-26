@@ -64,6 +64,7 @@ def test_kaputte_werte(ps):
 
 
 def test_api(api, ps):
-    assert api.get("/api/system") == (200, {"akku": None})
+    s, d = api.get("/api/system")
+    assert s == 200 and d["akku"] is None
     geraet(ps, "BAT0", type="Battery", status="Discharging", capacity=42)
     assert api.get("/api/system")[1]["akku"] == {"prozent": 42, "netzteil": False, "laedt": False}

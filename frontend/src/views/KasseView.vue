@@ -5,6 +5,8 @@ import { aktiveProdukte, pfandProdukte, produktById, state, verkaufsProdukte } f
 import { euro } from '../format.js'
 import { toast, showError } from '../ui.js'
 import Icon from '../components/Icon.vue'
+import PersonWahl from '../components/PersonWahl.vue'
+import { kassierer, letzteKassierer } from '../personen.js'
 
 // Warenkorb: produktId -> Anzahl (Reihenfolge = Reihenfolge des Hinzufügens)
 const korb = reactive(new Map())
@@ -93,6 +95,7 @@ async function aufgeben() {
       client_ref: clientRef,
       karte: nurPfand.value ? null : karte.value,
       eigenbedarf: eigenbedarf.value,
+      kassierer: kassierer.value || null,
       produkte: positionen.value.map(p => ({ id: p.produkt.id, anzahl: p.anzahl }))
     })
     const serverGesamt = res.preis_cent + res.pfand_cent
@@ -167,6 +170,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </section>
 
     <aside ref="korbEl" class="korb card" aria-label="Aktuelle Bestellung">
+      <PersonWahl v-model="kassierer" label="Kasse:" :vorschlaege="letzteKassierer" class="korb-person" />
       <div class="card-head">
         <h2>Bestellung <span v-if="anzahlGesamt" class="badge">{{ anzahlGesamt }} Artikel</span></h2>
         <button class="btn btn-ghost btn-sm" :disabled="!korb.size && !gegeben.length" @click="leeren">Leeren</button>
@@ -331,6 +335,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   .kasse .mobile-bar { display: flex; position: fixed; left: 16px; right: 16px; bottom: 16px; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 30; box-shadow: var(--shadow-lg); }
   .kasse { padding-bottom: 100px; }
 }
+.korb-person { margin-bottom: 10px; }
 .pfand-titel { margin: 22px 0 10px; font-size: 1rem; color: var(--text-2); }
 .tile-pfand { border-style: dashed; min-height: 96px; }
 .tile-pfand .tile-price { color: var(--ok); }

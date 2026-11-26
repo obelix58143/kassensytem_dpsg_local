@@ -23,6 +23,8 @@ export const karteById = computed(() => new Map(state.karten.map(k => [k.id, k])
 export const aktiveProdukte = computed(() => state.produkte.filter(p => p.aktiv))
 // Normale Produkte vs. Pfandrückgaben (typ 'pfand': Geld zurück an den Kunden)
 export const verkaufsProdukte = computed(() => aktiveProdukte.value.filter(p => p.typ !== 'pfand'))
+// Kundendisplay: einzelne Produkte lassen sich dort ausblenden (z.B. Kombi nur auf Nachfrage)
+export const displayProdukte = computed(() => verkaufsProdukte.value.filter(p => p.auf_display !== false))
 export const pfandProdukte = computed(() => aktiveProdukte.value.filter(p => p.typ === 'pfand'))
 export const istPfand = (produktId) => produktById.value.get(produktId)?.typ === 'pfand'
 
