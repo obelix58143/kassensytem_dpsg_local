@@ -121,6 +121,8 @@ function nextTheme() {
 .zoom { display: inline-flex; align-items: center; }
 .zoom .btn { padding: 0 8px; font-weight: 700; }
 .zoom-wert { min-width: 4.2em; font-variant-numeric: tabular-nums; color: var(--text-2); }
+/* wird es eng, reichen A− / A+ (Navigation geht vor) */
+@media (max-width: 1400px) { .zoom-wert { display: none; } }
 .status { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
 .status.is-on { color: var(--ok); background: var(--ok-soft); }
 .status.is-off { color: var(--danger); background: var(--danger-soft); }

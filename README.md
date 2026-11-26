@@ -23,7 +23,8 @@ Kasse, Ausgabe und Kundendisplay sind beliebige Geräte mit Browser im selben WL
 - **Ranking** – an Kasse und Ausgabe trägt man sich mit Namen ein (pro Gerät gemerkt, abschaltbar);
   die Statistik zeigt, wer am meisten eingenommen und wer am schnellsten fertig gemeldet hat
 - **Adresse auf der Startseite** – die IP des Kassen-Rechners zum Abtippen auf den Tablets
-- **Zoom** – A−/A+ in der Kopfzeile, pro Gerät gemerkt (am Kassen-Rechner selbst auf dem Server)
+- **Zoom** – A−/A+ in der Kopfzeile, an der Kasse zusätzlich getrennt für die Produktkacheln;
+  pro Gerät gemerkt (am Kassen-Rechner selbst auf dem Server)
 - **Bondrucker** (ESC/POS) – USB oder Netzwerk, 58/80 mm, Kopf-/Fußzeile, Logo, Sprüche,
   „jede N-te Bestellung gewinnt", alles in der Oberfläche einstellbar und abschaltbar
 - **Robust** – automatische Wiederverbindung bei WLAN-Aussetzern, keine doppelten Bestellungen

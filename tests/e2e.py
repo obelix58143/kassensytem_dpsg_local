@@ -490,14 +490,25 @@ def lauf(args, server):
         seite_hoch = lambda: kp.evaluate("document.documentElement.scrollHeight - innerHeight")  # noqa: E731
         check("1280×720 voller Warenkorb (mit Karten): 'Aufgeben' sichtbar, Seite scrollt nicht",
               unten() <= 720 and seite_hoch() <= 1, f"unten={unten()} überstand={seite_hoch()}")
+        breite = lambda sel: kp.evaluate(f"document.querySelector('{sel}').getBoundingClientRect().width")  # noqa: E731
+        kachel0, korb0 = breite(".tile"), breite(".korb")
+        kp.get_by_role("button", name="Kacheln größer").click()
+        kp.get_by_role("button", name="Kacheln größer").click()
+        check("Kacheln größer, Bestellkasten bleibt gleich",
+              bis(lambda: state()["einstellungen"]["kiosk_kacheln"] == 1.25 and breite(".korb") == korb0
+                  and kp.evaluate("getComputedStyle(document.querySelector('.kachel-zoom')).zoom") == "1.25"),
+              f"kacheln={state()['einstellungen']['kiosk_kacheln']} korb {korb0}->{breite('.korb')} kachel {kachel0}->{breite('.tile')}")
+        shot(kp, "kacheln_groesser")
+        kp.locator(".kachel-wert").click()
+        check("Kacheln zurück auf 100 %", bis(lambda: state()["einstellungen"]["kiosk_kacheln"] == 1.0))
         kp.locator(".zoom button", has_text="A+").click()
         check("A+ vergrößert (Kiosk: auf dem Server gespeichert)",
               bis(lambda: state()["einstellungen"]["kiosk_zoom"] == 1.1 and kp.evaluate("document.documentElement.style.zoom") == "1.1"))
         check("…'Aufgeben' auch mit Zoom sichtbar", bis(lambda: unten() * 1.1 <= 721 or unten() <= 720), unten())
         kp.reload(); kp.wait_for_selector(".tile")
         check("Zoom bleibt nach Neuladen", bis(lambda: kp.evaluate("document.documentElement.style.zoom") == "1.1"))
-        kp.locator(".zoom-wert").click()
-        check("Klick auf % setzt 100 % zurück", bis(lambda: state()["einstellungen"]["kiosk_zoom"] == 1.0
+        kp.locator(".zoom button", has_text="A−").click()
+        check("A− wieder auf 100 %", bis(lambda: state()["einstellungen"]["kiosk_zoom"] == 1.0
                                                        and kp.evaluate("document.documentElement.style.zoom") == ""))
         kp.keyboard.press("Escape"); kctx.close()
 

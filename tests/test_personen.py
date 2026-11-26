@@ -121,3 +121,10 @@ def test_kiosk_zoom(api, wert, ok):
     assert (s == 200) is ok
     if ok:
         assert api.state()["einstellungen"]["kiosk_zoom"] == float(wert)
+
+
+def test_kiosk_kacheln(api):
+    assert api.state()["einstellungen"]["kiosk_kacheln"] == 1.0
+    assert api.put("/api/einstellungen", {"kiosk_kacheln": 1.5})[0] == 200
+    assert api.state()["einstellungen"]["kiosk_kacheln"] == 1.5
+    assert api.put("/api/einstellungen", {"kiosk_kacheln": 4})[0] == 400

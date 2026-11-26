@@ -7,6 +7,7 @@ import { toast, showError } from '../ui.js'
 import Icon from '../components/Icon.vue'
 import PersonWahl from '../components/PersonWahl.vue'
 import { kassierer, letzteKassierer } from '../personen.js'
+import { STUFEN, kachelSchritt, kachelSetzen, kachelZoom } from '../zoom.js'
 
 // Warenkorb: produktId -> Anzahl (Reihenfolge = Reihenfolge des Hinzufügens)
 const korb = reactive(new Map())
@@ -137,6 +138,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 <template>
   <main class="page kasse">
     <section class="produkte" aria-label="Produkte">
+      <div class="kachel-groesse" role="group" aria-label="Größe der Produktkacheln">
+        <span class="muted">Kacheln</span>
+        <button class="btn btn-ghost btn-sm" aria-label="Kacheln kleiner" :disabled="kachelZoom <= STUFEN[0]" @click="kachelSchritt(-1)">−</button>
+        <button class="btn btn-ghost btn-sm kachel-wert" title="Kacheln auf 100 %" @click="kachelSetzen(1)">{{ Math.round(kachelZoom * 100) }} %</button>
+        <button class="btn btn-ghost btn-sm" aria-label="Kacheln größer" :disabled="kachelZoom >= STUFEN[STUFEN.length - 1]" @click="kachelSchritt(1)">+</button>
+      </div>
+      <div class="kachel-zoom" :style="kachelZoom !== 1 ? { zoom: kachelZoom } : null">
       <div v-if="aktiveProdukte.length === 0" class="empty">
         Noch keine Produkte – unter <router-link to="/settings">Einstellungen</router-link> anlegen.
       </div>
@@ -169,6 +177,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           </div>
         </div>
       </template>
+      </div>
     </section>
 
     <aside ref="korbEl" class="korb card" aria-label="Aktuelle Bestellung">
@@ -355,6 +364,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   .kasse { padding-bottom: 100px; }
 }
 .korb-person { margin-bottom: 10px; }
+.kachel-groesse { display: flex; align-items: center; justify-content: flex-end; gap: 2px; margin: -8px 0 6px; font-size: .85rem; }
+.kachel-groesse .btn { min-height: 30px; height: 30px; padding: 0 10px; font-weight: 700; }
+.kachel-wert { min-width: 4.2em; color: var(--text-2); font-variant-numeric: tabular-nums; }
+/* Badge der Kachel ragt nach oben/rechts heraus – Platz lassen */
+.kachel-zoom { padding-top: 8px; }
 .pfand-titel { margin: 22px 0 10px; font-size: 1rem; color: var(--text-2); }
 .tile-pfand { border-style: dashed; min-height: 96px; }
 .tile-pfand .tile-price { color: var(--ok); }

@@ -425,6 +425,7 @@ EINSTELLUNGEN_STANDARD = {
     "name_kasse": True,               # Kasse fragt nach dem Namen (Ranking in der Statistik)
     "name_ausgabe": True,             # Ausgabe fragt nach dem Namen (Ranking in der Statistik)
     "kiosk_zoom": 1.0,                # Zoom des Browsers am Kassen-Rechner selbst (A−/A+)
+    "kiosk_kacheln": 1.0,             # Größe der Produktkacheln an der Kasse am Kassen-Rechner selbst
     # --- Bondrucker (ESC/POS) ---
     "drucker_aktiv": True,            # aus = es wird nie gedruckt
     "drucker_verbindung": "usb",      # "usb" (Gerätedatei) oder "netzwerk" (RAW, Port 9100)
@@ -453,9 +454,9 @@ _HOST = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?$")
 def _pruefe_einstellung(key, value):
     if key not in EINSTELLUNGEN_STANDARD:
         raise DBError(f"Unbekannte Einstellung: {key}")
-    if key == "kiosk_zoom" and type(value) is int:
+    if key in ("kiosk_zoom", "kiosk_kacheln") and type(value) is int:
         value = float(value)  # JSON kennt 1 und 1.0 nicht getrennt
-    if key == "kiosk_zoom" and type(value) is float and not 0.5 <= value <= 3:
+    if key in ("kiosk_zoom", "kiosk_kacheln") and type(value) is float and not 0.5 <= value <= 3:
         raise DBError("Zoom muss zwischen 50 und 300 % liegen")
     if type(value) is not type(EINSTELLUNGEN_STANDARD[key]):
         raise DBError(f"Falscher Typ für {key}")
