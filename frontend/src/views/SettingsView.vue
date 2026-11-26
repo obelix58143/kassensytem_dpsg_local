@@ -321,7 +321,7 @@ async function reset() {
 .psort .btn { min-height: 26px; height: 26px; font-size: .7rem; }
 .pmeta { display: flex; flex-direction: column; gap: 4px; padding-bottom: 4px; }
 .pactions { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
-.pmeta .switch span { display: inline-block; min-width: 3.2em; }
+.pmeta .switch span { display: inline-block; min-width: 3.2em; white-space: nowrap; }
 .pitem .field-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pitem .field.invalid .field-label { color: var(--danger); }
 .pitem .field.invalid input { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }

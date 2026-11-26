@@ -135,8 +135,6 @@ const kartenChart = (t) => {
   }
 }
 
-const medaille = (i) => ['🥇', '🥈', '🥉'][i] || `${i + 1}.`
-
 const produktChartHoehe = computed(() => Math.max(160, s.value.produkte.length * 40 + 40))
 const kartenChartHoehe = computed(() => Math.max(140, s.value.karten.length * 34 + 40))
 </script>
@@ -247,13 +245,13 @@ const kartenChartHoehe = computed(() => Math.max(140, s.value.karten.length * 34
 
       <div v-if="s.rankingKasse.length || s.rankingAusgabe.length" class="rankings">
         <section v-if="s.rankingKasse.length" class="card ranking" aria-labelledby="h-rk">
-          <h2 id="h-rk">🏆 Kasse – meiste Einnahmen</h2>
+          <h2 id="h-rk">Kasse – meiste Einnahmen</h2>
           <p class="chart-sub">Warenumsatz ohne Pfand und Eigenbedarf</p>
           <table class="table">
             <thead><tr><th></th><th>Name</th><th class="r">Umsatz</th><th class="r">Bestellungen</th><th class="r">Ø Bon</th></tr></thead>
             <tbody>
               <tr v-for="(r, i) in s.rankingKasse" :key="r.name">
-                <td class="platz">{{ medaille(i) }}</td>
+                <td><span class="platz" :class="'platz-' + (i + 1)">{{ i + 1 }}</span></td>
                 <td><strong>{{ r.name }}</strong></td>
                 <td class="r num"><strong>{{ euro(r.umsatz) }}</strong></td>
                 <td class="r num">{{ r.bestellungen }}</td>
@@ -263,13 +261,13 @@ const kartenChartHoehe = computed(() => Math.max(140, s.value.karten.length * 34
           </table>
         </section>
         <section v-if="s.rankingAusgabe.length" class="card ranking" aria-labelledby="h-ra">
-          <h2 id="h-ra">⚡ Ausgabe – schnellste Bearbeitung</h2>
+          <h2 id="h-ra">Ausgabe – schnellste Bearbeitung</h2>
           <p class="chart-sub">Ø Zeit von der Bestellung bis „{{ state.einstellungen.bereit_aktiv ? 'Fertig' : 'Abgeholt' }}"</p>
           <table class="table">
             <thead><tr><th></th><th>Name</th><th class="r">Ø Zeit</th><th class="r">Bearbeitet</th><th class="r">Schnellste</th></tr></thead>
             <tbody>
               <tr v-for="(r, i) in s.rankingAusgabe" :key="r.name">
-                <td class="platz">{{ medaille(i) }}</td>
+                <td><span class="platz" :class="'platz-' + (i + 1)">{{ i + 1 }}</span></td>
                 <td><strong>{{ r.name }}</strong></td>
                 <td class="r num"><strong>{{ dauer(r.avg) }}</strong></td>
                 <td class="r num">{{ r.anzahl }}</td>
@@ -319,5 +317,9 @@ const kartenChartHoehe = computed(() => Math.max(140, s.value.karten.length * 34
 .ranking { padding: 16px; overflow-x: auto; }
 .ranking h2 { font-size: 1.05rem; margin-bottom: 2px; }
 .ranking .table { margin-top: 8px; }
-.ranking .platz { width: 2.2em; font-size: 1.2rem; }
+.ranking .platz { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; font-weight: 800; background: var(--surface-2); color: var(--text-2); }
+/* Gold, Silber, Bronze – ohne Emoji, die fehlen auf manchen Geräten */
+.ranking .platz-1 { background: #e8b923; color: #3b2a00; }
+.ranking .platz-2 { background: #b9c0c8; color: #22272d; }
+.ranking .platz-3 { background: #cd8a4f; color: #2e1600; }
 </style>

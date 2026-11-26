@@ -92,7 +92,7 @@ function bon(b) {
           </section>
           <section aria-labelledby="h-zub" class="ausgabe-sec">
             <h2 id="h-zub" class="sec-title">In Zubereitung <span class="badge">{{ inZubereitung.length }}</span></h2>
-            <div v-if="!inZubereitung.length" class="empty empty-sm">Keine offenen Bestellungen 🎉</div>
+            <div v-if="!inZubereitung.length" class="empty empty-sm">Keine offenen Bestellungen</div>
             <TransitionGroup tag="div" name="list" class="order-grid">
               <OrderCard v-for="b in inZubereitung" :key="b.id" :b="b" phase="zubereitung" :busy="busy.has(b.id)"
                          @fertig="fertig" @bon="bon" @storno="storno" />
@@ -101,7 +101,7 @@ function bon(b) {
         </template>
         <section v-else aria-labelledby="h-offen" class="ausgabe-sec">
           <h2 id="h-offen" class="sec-title">Bestellt <span class="badge">{{ offeneBestellungen.length }}</span></h2>
-          <div v-if="!offeneBestellungen.length" class="empty">Keine offenen Bestellungen 🎉</div>
+          <div v-if="!offeneBestellungen.length" class="empty">Keine offenen Bestellungen</div>
           <TransitionGroup tag="div" name="list" class="order-grid">
             <OrderCard v-for="b in offeneBestellungen" :key="b.id" :b="b" phase="offen" :busy="busy.has(b.id)"
                        @abgeholt="abgeholt" @bon="bon" @storno="storno" />
